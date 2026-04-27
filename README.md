@@ -52,3 +52,28 @@ To-Eat-List 希望帮助我根据每天的实际情况，给出更合理的饮�
 frontend/   前端页面
 backend/    后端接口与推荐逻辑
 docs/       项目文档
+
+## 技术栈
+
+### 前端
+- Vue 3
+- Vite
+- Vue Router
+- Pinia
+- Axios
+- Naive UI
+- JavaScript
+
+### 后端
+- Python
+- FastAPI
+- Uvicorn
+- Pydantic
+- SQLAlchemy
+
+### 数据库
+- SQLite
+
+### 项目结构
+- 前后端分离
+- 单仓库管理
