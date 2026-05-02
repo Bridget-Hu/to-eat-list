@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from "vue-router";
 
 import HomePage from "../pages/Home/index.vue";
 import UploadPage from "../pages/Upload/index.vue";
+import RecommendPage from "../pages/Recommend/index.vue";
 
 const routes = [
   {
@@ -13,6 +14,11 @@ const routes = [
     path: "/upload",
     name: "Upload",
     component: UploadPage
+  },
+  {
+    path: "/recommend",
+    name: "Recommend",
+    component: RecommendPage
   }
 ];
 

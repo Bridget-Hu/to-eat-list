@@ -6,30 +6,35 @@
       <h1>校园吃饭决策助手</h1>
 
       <p class="intro">
-        帮你把校园外卖、食堂菜品、预算、口味偏好、忌口和搭配数据统一导入，
-        后续可交给 AI 后端进行饮食推荐和一日三餐规划。
+        帮你把校园外卖、食堂菜品、预算、口味偏好、忌口和搭配数据统一管理，
+        先导入菜品数据，再根据你的需求生成一日三餐推荐。
       </p>
 
       <div class="hero-actions">
-        <button class="primary-btn" @click="$emit('go-upload')">开始上传</button>
-        <button class="secondary-btn" @click="$emit('go-upload')">批量导入菜品数据</button>
+        <button class="primary-btn" @click="$router.push('/upload')">
+          导入菜品数据
+        </button>
+
+        <button class="recommend-btn" @click="$router.push('/recommend')">
+          生成今日推荐
+        </button>
       </div>
     </section>
 
     <section class="feature-grid">
       <div class="feature-card">
         <h3>批量导入</h3>
-        <p>不再一个个手动输入菜品，直接上传整理好的本地文档。</p>
+        <p>支持一次性上传整理好的菜品文档，减少手动录入的麻烦。</p>
       </div>
 
       <div class="feature-card">
-        <h3>支持 txt / Word</h3>
-        <p>支持 txt、doc、docx 文件，方便一次性录入菜品数据。</p>
+        <h3>个性化条件</h3>
+        <p>可以填写预算、口味偏好、忌口、健康目标和今天想吃什么。</p>
       </div>
 
       <div class="feature-card">
-        <h3>预留后端接口</h3>
-        <p>前端负责上传文件，后续存储、解析、AI 推荐交给后端。</p>
+        <h3>规则推荐</h3>
+        <p>先使用规则推荐生成一日三餐，后续可以继续接入 AI 后端。</p>
       </div>
     </section>
   </main>
@@ -37,91 +42,124 @@
 
 <style scoped>
 .home-page {
-  padding: 72px 8% 80px;
+  min-height: 100vh;
+  padding: 64px 8%;
+  background: linear-gradient(135deg, #eef6ff 0%, #f8fbff 100%);
+  color: #0f172a;
 }
 
 .hero {
-  max-width: 820px;
+  max-width: 1080px;
   margin: 0 auto;
-  text-align: center;
+  padding: 56px 48px;
+  border-radius: 32px;
+  background: white;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.1);
 }
 
 .tag {
-  display: inline-block;
-  margin-bottom: 18px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: #e0edff;
+  margin: 0 0 14px;
   color: #2563eb;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.hero h1 {
+h1 {
   margin: 0;
-  font-size: 56px;
+  font-size: clamp(38px, 6vw, 64px);
+  line-height: 1.05;
+  color: #0f172a;
 }
 
 .intro {
-  margin: 24px auto 0;
-  max-width: 680px;
+  max-width: 760px;
+  margin: 22px 0 0;
   color: #64748b;
-  font-size: 18px;
-  line-height: 1.8;
+  font-size: 17px;
+  line-height: 1.9;
 }
 
 .hero-actions {
-  margin-top: 36px;
   display: flex;
-  justify-content: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 34px;
 }
 
-.primary-btn,
-.secondary-btn {
+button {
   border: none;
-  cursor: pointer;
   border-radius: 999px;
-  font-size: 15px;
+  padding: 14px 26px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-2px);
 }
 
 .primary-btn {
-  padding: 14px 28px;
-  background: #2563eb;
   color: white;
-  font-weight: 700;
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.28);
 }
 
-.secondary-btn {
-  padding: 14px 28px;
-  background: white;
-  color: #2563eb;
-  font-weight: 700;
-  border: 1px solid #dbeafe;
+.recommend-btn {
+  color: white;
+  background: linear-gradient(135deg, #f97316, #fb923c);
+  box-shadow: 0 14px 30px rgba(249, 115, 22, 0.24);
 }
 
 .feature-grid {
-  max-width: 1040px;
-  margin: 72px auto 0;
+  max-width: 1080px;
+  margin: 28px auto 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 22px;
+  gap: 18px;
 }
 
 .feature-card {
   padding: 28px;
   border-radius: 24px;
   background: white;
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  border: 1px solid #dbeafe;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
 .feature-card h3 {
-  margin: 0 0 12px;
-  font-size: 22px;
+  margin: 0 0 10px;
+  color: #0f172a;
+  font-size: 20px;
 }
 
 .feature-card p {
   margin: 0;
   color: #64748b;
-  line-height: 1.7;
+  line-height: 1.8;
+}
+
+@media (max-width: 820px) {
+  .home-page {
+    padding: 36px 5%;
+  }
+
+  .hero {
+    padding: 36px 26px;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+  }
+
+  button {
+    width: 100%;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

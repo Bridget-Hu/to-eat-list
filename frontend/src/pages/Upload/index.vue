@@ -1,199 +1,266 @@
 <template>
   <main class="upload-page">
     <section class="upload-card">
-      <button class="back-btn" @click="$emit('go-home')">← 返回首页</button>
+      <p class="tag">Data Upload</p>
 
-      <h1>上传菜品数据文档</h1>
+      <h1>导入菜品数据</h1>
 
-      <p class="tip">
-        请上传已经整理好的 txt / Word 文档，里面可以包含菜品、预算、口味、忌口、搭配等数据。
+      <p class="desc">
+        选择整理好的 txt / csv 文件，系统会把菜品发送给后端保存，后续推荐会基于这些菜品生成。
       </p>
 
-      <input
-        ref="fileInput"
-        class="file-input"
-        type="file"
-        accept=".txt,.doc,.docx"
-        @change="handleFileChange"
-      />
+      <div class="upload-box">
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".txt,.csv,.doc,.docx"
+          hidden
+          @change="handleFileChange"
+        />
 
-      <div class="upload-box" @click="openFilePicker">
-        <template v-if="!selectedFile">
-          点击选择 txt / Word 文件
-        </template>
+        <button
+          class="choose-btn"
+          type="button"
+          :disabled="loading"
+          @click="openFilePicker"
+        >
+          {{ loading ? "导入中..." : selectedFile ? "重新选择文件" : "选择文件并导入" }}
+        </button>
 
-        <template v-else>
-          已选择：{{ selectedFile.name }}
-        </template>
+        <p class="file-name">
+          {{ selectedFile ? selectedFile.name : "暂未选择文件" }}
+        </p>
+
+        <p class="status" :class="statusType">
+          {{ statusText }}
+        </p>
       </div>
 
-      <div class="status-box">
-        {{ statusText }}
-      </div>
+      <div class="actions">
+        <button class="secondary-btn" type="button" @click="goHome">
+          返回首页
+        </button>
 
-      <button class="upload-btn" :disabled="!selectedFile" @click="submitFile">
-        确认上传
-      </button>
+        <button
+          class="recommend-btn"
+          type="button"
+          :disabled="!imported"
+          @click="goRecommend"
+        >
+          开始推荐
+        </button>
+      </div>
     </section>
   </main>
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref } from "vue";
+import { useRouter } from "vue-router";
 
-const API_URL = "/api/meal-data/import";
+const router = useRouter();
+
+const API_BASE = "http://127.0.0.1:8001";
 
 const fileInput = ref(null);
 const selectedFile = ref(null);
-const status = ref("idle");
-
-const statusText = computed(() => {
-  if (status.value === "idle") return "待选择文件";
-  if (status.value === "ready") return "文件已选择，等待上传";
-  if (status.value === "uploading") return "正在上传到后端";
-  if (status.value === "success") return "上传成功";
-  if (status.value === "error") return "上传失败";
-  return "待选择文件";
-});
+const statusText = ref("请选择 txt / csv / doc / docx 文件");
+const statusType = ref("");
+const loading = ref(false);
+const imported = ref(false);
 
 function openFilePicker() {
-  fileInput.value.click();
+  fileInput.value?.click();
 }
 
-function handleFileChange(event) {
+async function handleFileChange(event) {
   const file = event.target.files[0];
 
-  if (!file) return;
+  if (!file) {
+    selectedFile.value = null;
+    imported.value = false;
+    statusText.value = "暂未选择文件";
+    statusType.value = "";
+    return;
+  }
 
   selectedFile.value = file;
-  status.value = "ready";
-}
-
-async function submitFile() {
-  if (!selectedFile.value) return;
+  imported.value = false;
+  loading.value = true;
+  statusText.value = "正在导入菜品数据...";
+  statusType.value = "ready";
 
   try {
-    status.value = "uploading";
-
-    const file = selectedFile.value;
-    const ext = file.name.split(".").pop().toLowerCase();
-
-    let parsedText = "";
-
-    if (ext === "txt") {
-      parsedText = await file.text();
-    }
-
     const formData = new FormData();
-
     formData.append("file", file);
-    formData.append("parsedText", parsedText);
-    formData.append(
-      "metadata",
-      JSON.stringify({
-        filename: file.name,
-        fileType: ext,
-        fileSize: file.size,
-        needBackendParse: ext !== "txt",
-        source: "campus-meal-import"
-      })
-    );
 
-    const response = await fetch(API_URL, {
+    const response = await fetch(`${API_BASE}/foods/upload`, {
       method: "POST",
       body: formData
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      throw new Error("上传失败");
+      throw new Error(data.detail || "导入失败");
     }
 
-    status.value = "success";
+    imported.value = true;
+    statusText.value = `导入成功，共导入 ${data.count} 个菜品，可以开始推荐`;
+    statusType.value = "success";
   } catch (error) {
     console.error(error);
-    status.value = "error";
+    imported.value = false;
+    statusText.value = error.message || "导入失败，请检查后端是否启动";
+    statusType.value = "error";
+  } finally {
+    loading.value = false;
   }
+}
+
+function goHome() {
+  router.push("/");
+}
+
+function goRecommend() {
+  router.push("/recommend");
 }
 </script>
 
 <style scoped>
 .upload-page {
-  min-height: calc(100vh - 72px);
-  padding: 60px 8%;
-  display: flex;
-  justify-content: center;
+  min-height: 100vh;
+  padding: 64px 8%;
+  background: linear-gradient(135deg, #eef6ff 0%, #f8fbff 100%);
+  color: #0f172a;
 }
 
 .upload-card {
-  width: 100%;
-  max-width: 760px;
-  padding: 36px;
-  border-radius: 28px;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 44px;
+  border-radius: 32px;
   background: white;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.1);
 }
 
-.back-btn {
-  border: none;
-  background: transparent;
+.tag {
+  margin: 0 0 12px;
   color: #2563eb;
-  font-weight: 700;
-  cursor: pointer;
-  margin-bottom: 20px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.upload-card h1 {
-  margin: 0 0 16px;
-  font-size: 34px;
+h1 {
+  margin: 0;
+  font-size: 44px;
+  line-height: 1.1;
 }
 
-.tip {
+.desc {
+  margin: 18px 0 30px;
   color: #64748b;
+  font-size: 16px;
   line-height: 1.8;
 }
 
-.file-input {
-  display: none;
-}
-
 .upload-box {
-  margin-top: 28px;
-  height: 220px;
-  border: 2px dashed #93c5fd;
-  border-radius: 24px;
+  padding: 38px;
+  border: 2px dashed #bfdbfe;
+  border-radius: 26px;
   background: #f8fbff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #2563eb;
-  font-size: 22px;
+  text-align: center;
+}
+
+.choose-btn {
+  color: white;
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.24);
+}
+
+.file-name {
+  margin: 18px 0 8px;
+  color: #334155;
   font-weight: 800;
-  cursor: pointer;
 }
 
-.status-box {
-  margin-top: 18px;
-  padding: 14px 18px;
-  border-radius: 16px;
-  background: #f1f5f9;
-  color: #475569;
-  font-weight: 700;
+.status {
+  margin: 0;
+  color: #64748b;
 }
 
-.upload-btn {
-  width: 100%;
-  margin-top: 18px;
-  padding: 14px 28px;
+.status.ready {
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.status.success {
+  color: #16a34a;
+  font-weight: 800;
+}
+
+.status.error {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+button {
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: white;
-  font-weight: 700;
+  padding: 14px 24px;
+  font-weight: 900;
   cursor: pointer;
+  transition: 0.2s ease;
 }
 
-.upload-btn:disabled {
-  opacity: 0.5;
+button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+button:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.secondary-btn {
+  color: #2563eb;
+  background: #eef4ff;
+}
+
+.recommend-btn {
+  color: white;
+  background: linear-gradient(135deg, #f97316, #fb923c);
+  box-shadow: 0 14px 30px rgba(249, 115, 22, 0.24);
+}
+
+@media (max-width: 720px) {
+  .upload-page {
+    padding: 36px 5%;
+  }
+
+  .upload-card {
+    padding: 30px 22px;
+  }
+
+  h1 {
+    font-size: 34px;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  button {
+    width: 100%;
+  }
 }
 </style>
