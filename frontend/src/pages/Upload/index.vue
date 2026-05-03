@@ -12,7 +12,7 @@ const router = useRouter();
 
 const fileInput = ref(null);
 const selectedFile = ref(null);
-const statusText = ref("请选择 txt / csv / doc / docx 文件");
+const statusText = ref("请选择 txt / csv / json 文件");
 const statusType = ref("neutral");
 const loading = ref(false);
 const imported = ref(false);
@@ -89,7 +89,7 @@ async function handleFileChange(event) {
       </div>
 
       <div class="intro-badges">
-        <span class="status-pill neutral">支持 txt / csv / doc / docx</span>
+        <span class="status-pill neutral">支持 txt / csv / json</span>
         <span class="status-pill warning">建议先整理好列名与价格</span>
       </div>
     </section>
@@ -99,7 +99,7 @@ async function handleFileChange(event) {
         <input
           ref="fileInput"
           type="file"
-          accept=".txt,.csv,.doc,.docx"
+          accept=".txt,.csv,.json"
           hidden
           @change="handleFileChange"
         />

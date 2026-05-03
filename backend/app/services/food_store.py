@@ -1,50 +1,26 @@
 import csv
 import json
 from io import StringIO
-from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-DATA_FILE = DATA_DIR / "foods.json"
+from sqlalchemy.orm import Session
 
-
-def ensure_data_file():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    if not DATA_FILE.exists():
-        DATA_FILE.write_text("[]", encoding="utf-8")
-
-
-def load_foods():
-    ensure_data_file()
-
-    try:
-        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return []
-
-
-def save_foods(foods):
-    ensure_data_file()
-    DATA_FILE.write_text(
-        json.dumps(foods, ensure_ascii=False, indent=2),
-        encoding="utf-8"
-    )
-
-
-def clear_foods():
-    save_foods([])
+from app.models.food_item import FoodItem
 
 
 def parse_price(value):
     try:
         if value is None or value == "":
             return None
+
         return float(str(value).replace("元", "").strip())
     except ValueError:
         return None
 
 
-def normalize_food(row, food_id):
+def normalize_food(row):
+    if not isinstance(row, dict):
+        return None
+
     name = (
         row.get("名称")
         or row.get("菜品名称")
@@ -89,7 +65,6 @@ def normalize_food(row, food_id):
         return None
 
     return {
-        "id": food_id,
         "name": name,
         "category": category,
         "price": price,
@@ -106,12 +81,10 @@ def parse_food_text(text):
         return []
 
     rows = []
-
     reader = csv.DictReader(StringIO(text))
 
     if reader.fieldnames and ("名称" in reader.fieldnames or "name" in reader.fieldnames):
-        for row in reader:
-            rows.append(row)
+        rows.extend(reader)
     else:
         for line in text.splitlines():
             parts = [item.strip() for item in line.split(",")]
@@ -130,8 +103,8 @@ def parse_food_text(text):
 
     foods = []
 
-    for index, row in enumerate(rows, start=1):
-        food = normalize_food(row, index)
+    for row in rows:
+        food = normalize_food(row)
 
         if food:
             foods.append(food)
@@ -139,7 +112,66 @@ def parse_food_text(text):
     return foods
 
 
-def import_foods_from_text(text):
-    foods = parse_food_text(text)
-    save_foods(foods)
+def parse_food_json_text(text):
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+
+    if isinstance(payload, dict):
+        payload = payload.get("data") or payload.get("foods") or []
+
+    if not isinstance(payload, list):
+        return []
+
+    foods = []
+
+    for row in payload:
+        food = normalize_food(row)
+
+        if food:
+            foods.append(food)
+
     return foods
+
+
+def import_foods_from_text(text, filename=""):
+    lower_name = filename.lower()
+
+    if lower_name.endswith(".json"):
+        return parse_food_json_text(text)
+
+    return parse_food_text(text)
+
+
+def serialize_food(food):
+    return {
+        "id": food.id,
+        "name": food.name,
+        "category": food.category or "",
+        "price": food.price,
+        "taste": food.taste or "",
+        "tags": food.tags or "",
+        "note": food.note or ""
+    }
+
+
+def load_foods(db: Session):
+    foods = db.query(FoodItem).order_by(FoodItem.id.asc()).all()
+    return [serialize_food(food) for food in foods]
+
+
+def replace_foods(db: Session, foods_data):
+    db.query(FoodItem).delete()
+
+    for food in foods_data:
+        db.add(FoodItem(**food))
+
+    db.commit()
+
+    return load_foods(db)
+
+
+def clear_foods(db: Session):
+    db.query(FoodItem).delete()
+    db.commit()
