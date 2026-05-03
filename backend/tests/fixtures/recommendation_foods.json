@@ -1,0 +1,26 @@
+[
+  {
+    "name": "\u9ea6\u7247\u9e21\u86cb\u676f",
+    "category": "\u65e9\u9910",
+    "price": 8.0,
+    "taste": "\u6e05\u6de1",
+    "tags": "\u51cf\u8102;\u9ad8\u86cb\u767d",
+    "note": "\u9002\u5408\u65e9\u9910\u548c\u8f7b\u98df"
+  },
+  {
+    "name": "\u9999\u714e\u9e21\u80f8\u996d",
+    "category": "\u5348\u9910",
+    "price": 18.0,
+    "taste": "\u54b8\u9999",
+    "tags": "\u9ad8\u86cb\u767d;\u9e21\u80f8",
+    "note": "\u9002\u5408\u51cf\u8102\u671f\u7684\u6b63\u9910"
+  },
+  {
+    "name": "\u6e05\u7092\u65f6\u852c\u996d",
+    "category": "\u665a\u9910",
+    "price": 16.0,
+    "taste": "\u6e05\u6de1",
+    "tags": "\u51cf\u8102;\u4f4e\u6cb9",
+    "note": "\u665a\u9910\u5c3d\u91cf\u6e05\u723d"
+  }
+]
