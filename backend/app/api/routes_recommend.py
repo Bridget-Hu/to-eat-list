@@ -1,6 +1,7 @@
-﻿from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.services.daily_record_store import append_daily_record
 from app.services.food_store import load_foods
 
 router = APIRouter(prefix="/recommend", tags=["recommend"])
@@ -16,7 +17,13 @@ class RecommendRequest(BaseModel):
 
 
 def food_text(food):
-    return f"{food.get('name', '')} {food.get('category', '')} {food.get('taste', '')} {food.get('tags', '')} {food.get('note', '')}"
+    return (
+        f"{food.get('name', '')} "
+        f"{food.get('category', '')} "
+        f"{food.get('taste', '')} "
+        f"{food.get('tags', '')} "
+        f"{food.get('note', '')}"
+    )
 
 
 def contains_any(text, keywords):
@@ -30,10 +37,10 @@ def split_words(value):
     result = []
 
     for item in value.replace(",", "、").replace("，", "、").replace(" ", "、").split("、"):
-        item = item.strip()
+        cleaned = item.strip()
 
-        if item:
-            result.append(item)
+        if cleaned:
+            result.append(cleaned)
 
     return result
 
@@ -77,12 +84,12 @@ def score_food(food, meal_type, data):
     if data.goal == "减脂":
         if contains_any(text, ["减脂", "低脂", "低油", "清淡", "轻食", "高蛋白"]):
             score += 8
+
         if contains_any(text, ["油炸", "高糖", "奶茶", "重口", "热量较高"]):
             score -= 6
 
-    if data.goal == "增肌":
-        if contains_any(text, ["增肌", "高蛋白", "鸡胸", "牛肉", "鸡蛋", "肉"]):
-            score += 8
+    if data.goal == "增肌" and contains_any(text, ["增肌", "高蛋白", "鸡胸", "牛肉", "鸡蛋", "肉"]):
+        score += 8
 
     price = food.get("price")
     budget = data.budget or 60
@@ -128,26 +135,25 @@ def reason_for(food, meal_type, data):
         return f"没有找到适合{meal_type}的菜品，请重新导入更多菜品数据。"
 
     reasons = []
-
     text = food_text(food)
 
     if data.want and contains_any(text, split_words(data.want)):
-        reasons.append("匹配了你今天想吃的内容")
+        reasons.append("匹配了你今天突然很想吃的内容")
 
     if data.taste and contains_any(text, split_words(data.taste)):
         reasons.append("符合你的口味偏好")
 
     if data.goal == "减脂":
-        reasons.append("已尽量选择清淡、低油或高蛋白方向")
+        reasons.append("尽量优先了清淡、低油或高蛋白方向")
 
     if data.goal == "增肌":
-        reasons.append("已优先考虑蛋白质更充足的选择")
+        reasons.append("优先考虑了蛋白质更充足的选择")
 
     if data.dislike:
         reasons.append("已避开你的忌口关键词")
 
     if not reasons:
-        reasons.append("根据已导入菜品进行规则匹配")
+        reasons.append("根据已导入菜品做了基础规则匹配")
 
     price = food.get("price")
 
@@ -157,6 +163,15 @@ def reason_for(food, meal_type, data):
     return "，".join(reasons) + "。"
 
 
+def meal_payload(food, meal_type, data):
+    return {
+        "type": meal_type,
+        "name": food["name"] if food else f"暂无合适{meal_type}",
+        "reason": reason_for(food, meal_type, data),
+        "price": food.get("price") if food else None
+    }
+
+
 @router.post("/daily")
 def recommend_daily(data: RecommendRequest):
     foods = load_foods()
@@ -164,7 +179,7 @@ def recommend_daily(data: RecommendRequest):
     if not foods:
         raise HTTPException(
             status_code=400,
-            detail="还没有导入菜品数据，请先去上传页导入菜品文件"
+            detail="还没有导入菜品数据，请先去上传页导入菜品文件。"
         )
 
     used_ids = set()
@@ -173,18 +188,49 @@ def recommend_daily(data: RecommendRequest):
     lunch = choose_food(foods, "午餐", data, used_ids)
     dinner = choose_food(foods, "晚餐", data, used_ids)
 
-    total_price = 0
+    meals = [
+        meal_payload(breakfast, "早餐", data),
+        meal_payload(lunch, "午餐", data),
+        meal_payload(dinner, "晚餐", data)
+    ]
 
-    for food in [breakfast, lunch, dinner]:
-        if food and food.get("price") is not None:
-            total_price += food.get("price")
+    total_price = round(
+        sum(meal["price"] or 0 for meal in meals),
+        2
+    )
+    budget = data.budget or 0
+    remaining_budget = round(budget - total_price, 2)
+
+    summary = (
+        f"本次推荐基于已导入的 {len(foods)} 个菜品生成，"
+        f"预计总价约 {total_price} 元，"
+        f"预算为 {budget} 元，"
+        f"结余约 {remaining_budget} 元。"
+    )
+
+    saved_record = append_daily_record({
+        "budget": budget,
+        "goal": data.goal or "",
+        "taste": data.taste or "",
+        "dislike": data.dislike or "",
+        "want": data.want or "",
+        "hadMilkTea": bool(data.hadMilkTea),
+        "totalPrice": total_price,
+        "remainingBudget": remaining_budget,
+        "summary": summary,
+        "meals": meals
+    })
 
     return {
-        "breakfast": breakfast["name"] if breakfast else "暂无合适早餐",
-        "breakfastReason": reason_for(breakfast, "早餐", data),
-        "lunch": lunch["name"] if lunch else "暂无合适午餐",
-        "lunchReason": reason_for(lunch, "午餐", data),
-        "dinner": dinner["name"] if dinner else "暂无合适晚餐",
-        "dinnerReason": reason_for(dinner, "晚餐", data),
-        "summary": f"本次推荐基于你已上传的 {len(foods)} 个菜品生成；预计总价约 {total_price} 元；预算为 {data.budget or 0} 元。"
+        "breakfast": meals[0]["name"],
+        "breakfastReason": meals[0]["reason"],
+        "lunch": meals[1]["name"],
+        "lunchReason": meals[1]["reason"],
+        "dinner": meals[2]["name"],
+        "dinnerReason": meals[2]["reason"],
+        "summary": summary,
+        "totalPrice": total_price,
+        "remainingBudget": remaining_budget,
+        "recordId": saved_record["id"],
+        "createdAt": saved_record["createdAt"]
     }

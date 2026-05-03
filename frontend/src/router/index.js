@@ -1,32 +1,53 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 
 import HomePage from "../pages/Home/index.vue";
-import UploadPage from "../pages/Upload/index.vue";
+import HistoryPage from "../pages/History/index.vue";
 import RecommendPage from "../pages/Recommend/index.vue";
+import UploadPage from "../pages/Upload/index.vue";
 
 const routes = [
   {
     path: "/",
     name: "Home",
-    component: HomePage
+    component: HomePage,
+    meta: {
+      label: "首页"
+    }
   },
   {
     path: "/upload",
     name: "Upload",
-    component: UploadPage
+    component: UploadPage,
+    meta: {
+      label: "导入菜品"
+    }
   },
   {
     path: "/recommend",
     name: "Recommend",
-    component: RecommendPage
+    component: RecommendPage,
+    meta: {
+      label: "生成推荐"
+    }
+  },
+  {
+    path: "/history",
+    name: "History",
+    component: HistoryPage,
+    meta: {
+      label: "历史记录"
+    }
   }
 ];
-
-console.log("路由加载成功", routes);
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes
 });
+
+export const navigationItems = routes.map((route) => ({
+  to: route.path,
+  label: route.meta?.label ?? route.name
+}));
 
 export default router;

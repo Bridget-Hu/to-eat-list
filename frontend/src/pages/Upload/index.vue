@@ -1,94 +1,45 @@
-<template>
-  <main class="upload-page">
-    <section class="upload-card">
-      <p class="tag">Data Upload</p>
-
-      <h1>导入菜品数据</h1>
-
-      <p class="desc">
-        选择整理好的 txt / csv 文件，系统会把菜品发送给后端保存，后续推荐会基于这些菜品生成。
-      </p>
-
-      <div class="upload-box">
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".txt,.csv,.doc,.docx"
-          hidden
-          @change="handleFileChange"
-        />
-
-        <button
-          class="choose-btn"
-          type="button"
-          :disabled="loading"
-          @click="openFilePicker"
-        >
-          {{ loading ? "导入中..." : selectedFile ? "重新选择文件" : "选择文件并导入" }}
-        </button>
-
-        <p class="file-name">
-          {{ selectedFile ? selectedFile.name : "暂未选择文件" }}
-        </p>
-
-        <p class="status" :class="statusType">
-          {{ statusText }}
-        </p>
-      </div>
-
-      <div class="actions">
-        <button class="secondary-btn" type="button" @click="goHome">
-          返回首页
-        </button>
-
-        <button
-          class="recommend-btn"
-          type="button"
-          :disabled="!imported"
-          @click="goRecommend"
-        >
-          开始推荐
-        </button>
-      </div>
-    </section>
-  </main>
-</template>
-
 <script setup>
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 
-const router = useRouter();
+import { API_BASE } from "@/utils/api";
 
-const API_BASE = "http://127.0.0.1:8001";
+defineOptions({
+  name: "UploadPage"
+});
+
+const router = useRouter();
 
 const fileInput = ref(null);
 const selectedFile = ref(null);
 const statusText = ref("请选择 txt / csv / doc / docx 文件");
-const statusType = ref("");
+const statusType = ref("neutral");
 const loading = ref(false);
 const imported = ref(false);
+const importedCount = ref(0);
 
 function openFilePicker() {
   fileInput.value?.click();
 }
 
 async function handleFileChange(event) {
-  const file = event.target.files[0];
+  const file = event.target.files?.[0];
 
   if (!file) {
     selectedFile.value = null;
     imported.value = false;
+    importedCount.value = 0;
     statusText.value = "暂未选择文件";
-    statusType.value = "";
+    statusType.value = "neutral";
     return;
   }
 
   selectedFile.value = file;
   imported.value = false;
+  importedCount.value = 0;
   loading.value = true;
-  statusText.value = "正在导入菜品数据...";
-  statusType.value = "ready";
+  statusText.value = "正在解析并导入菜品数据...";
+  statusType.value = "warning";
 
   try {
     const formData = new FormData();
@@ -99,167 +50,311 @@ async function handleFileChange(event) {
       body: formData
     });
 
-    const data = await response.json();
+    let data = null;
+
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
 
     if (!response.ok) {
-      throw new Error(data.detail || "导入失败");
+      throw new Error(data?.detail || data?.message || "导入失败，请检查文件格式。");
     }
 
     imported.value = true;
-    statusText.value = `导入成功，共导入 ${data.count} 个菜品，可以开始推荐`;
+    importedCount.value = data?.count ?? 0;
+    statusText.value = `导入成功，已写入 ${importedCount.value} 个菜品。`;
     statusType.value = "success";
   } catch (error) {
-    console.error(error);
     imported.value = false;
-    statusText.value = error.message || "导入失败，请检查后端是否启动";
-    statusType.value = "error";
+    importedCount.value = 0;
+    statusText.value = error.message || "导入失败，请确认后端服务已启动。";
+    statusType.value = "danger";
   } finally {
     loading.value = false;
   }
 }
-
-function goHome() {
-  router.push("/");
-}
-
-function goRecommend() {
-  router.push("/recommend");
-}
 </script>
 
+<template>
+  <div class="page upload-page">
+    <section class="panel intro-panel">
+      <div>
+        <p class="section-kicker">Food Source</p>
+        <h1 class="section-title">先把菜品池整理好，推荐才会更靠谱。</h1>
+        <p class="section-desc">
+          上传文件后，系统会把菜品名称、分类、价格、口味和备注写入后端数据源，后续推荐和历史记录都会基于这一批数据工作。
+        </p>
+      </div>
+
+      <div class="intro-badges">
+        <span class="status-pill neutral">支持 txt / csv / doc / docx</span>
+        <span class="status-pill warning">建议先整理好列名与价格</span>
+      </div>
+    </section>
+
+    <section class="upload-layout">
+      <article class="panel upload-panel">
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".txt,.csv,.doc,.docx"
+          hidden
+          @change="handleFileChange"
+        />
+
+        <div class="upload-core">
+          <div class="upload-icon">食</div>
+
+          <h2>导入外卖与食堂菜品</h2>
+          <p>
+            支持一次性把你常吃的早餐、午餐、晚餐、饮品和加餐整理进来，减少每天重复录入。
+          </p>
+
+          <button
+            class="primary-button"
+            type="button"
+            :disabled="loading"
+            @click="openFilePicker"
+          >
+            {{ loading ? "导入中..." : selectedFile ? "重新选择文件" : "选择文件并导入" }}
+          </button>
+        </div>
+
+        <div class="upload-status">
+          <div>
+            <span class="status-label">当前文件</span>
+            <strong>{{ selectedFile ? selectedFile.name : "尚未选择文件" }}</strong>
+          </div>
+
+          <span class="status-pill" :class="statusType">
+            {{ statusText }}
+          </span>
+        </div>
+
+        <div class="panel success-panel" :class="{ visible: imported }">
+          <strong>导入完成</strong>
+          <p>
+            现在可以直接去生成推荐，或者稍后在历史记录页回看系统为你生成过的菜单。
+          </p>
+
+          <div class="success-actions">
+            <button class="secondary-button" type="button" @click="router.push('/')">
+              返回首页
+            </button>
+
+            <button
+              class="primary-button"
+              type="button"
+              :disabled="!imported"
+              @click="router.push('/recommend')"
+            >
+              开始生成推荐
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <aside class="panel tips-panel">
+        <h2>整理建议</h2>
+
+        <div class="tip-list">
+          <article class="tip-item">
+            <span>01</span>
+            <div>
+              <strong>补齐价格和分类</strong>
+              <p>这样推荐阶段才能更好地控制预算，并区分早午晚餐。</p>
+            </div>
+          </article>
+
+          <article class="tip-item">
+            <span>02</span>
+            <div>
+              <strong>口味标签尽量具体</strong>
+              <p>比如“清淡”“微辣”“高蛋白”，后端规则会直接参考这些关键词。</p>
+            </div>
+          </article>
+
+          <article class="tip-item">
+            <span>03</span>
+            <div>
+              <strong>备注写真实体验</strong>
+              <p>像“适合赶时间”“容易腻”“减脂友好”这类备注，会让推荐更像你自己的选择。</p>
+            </div>
+          </article>
+        </div>
+      </aside>
+    </section>
+  </div>
+</template>
+
 <style scoped>
-.upload-page {
-  min-height: 100vh;
-  padding: 64px 8%;
-  background: linear-gradient(135deg, #eef6ff 0%, #f8fbff 100%);
-  color: #0f172a;
+.intro-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  padding: 30px;
 }
 
-.upload-card {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 44px;
-  border-radius: 32px;
-  background: white;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.1);
+.intro-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
-.tag {
-  margin: 0 0 12px;
-  color: #2563eb;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+.upload-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.62fr);
+  gap: 20px;
 }
 
-h1 {
-  margin: 0;
-  font-size: 44px;
-  line-height: 1.1;
+.upload-panel,
+.tips-panel {
+  padding: 28px;
 }
 
-.desc {
-  margin: 18px 0 30px;
-  color: #64748b;
-  font-size: 16px;
-  line-height: 1.8;
-}
-
-.upload-box {
-  padding: 38px;
-  border: 2px dashed #bfdbfe;
-  border-radius: 26px;
-  background: #f8fbff;
+.upload-core {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding: 32px;
+  border: 2px dashed rgba(17, 75, 95, 0.18);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top, rgba(255, 140, 66, 0.12), transparent 54%),
+    rgba(255, 255, 255, 0.7);
   text-align: center;
 }
 
-.choose-btn {
+.upload-icon {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 24px;
   color: white;
-  background: linear-gradient(135deg, #2563eb, #0ea5e9);
-  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.24);
+  font-size: 28px;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent-secondary), #ffb36d);
+  box-shadow: 0 18px 34px rgba(255, 140, 66, 0.22);
 }
 
-.file-name {
-  margin: 18px 0 8px;
-  color: #334155;
-  font-weight: 800;
-}
-
-.status {
+.upload-core h2,
+.tips-panel h2,
+.success-panel strong,
+.tip-item strong {
   margin: 0;
-  color: #64748b;
 }
 
-.status.ready {
-  color: #2563eb;
-  font-weight: 800;
+.upload-core p,
+.success-panel p,
+.tip-item p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.75;
 }
 
-.status.success {
-  color: #16a34a;
-  font-weight: 800;
+.upload-status {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.68);
 }
 
-.status.error {
-  color: #dc2626;
-  font-weight: 800;
+.status-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
-.actions {
+.success-panel {
+  display: none;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.success-panel.visible {
+  display: grid;
+}
+
+.success-actions {
   display: flex;
   flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tips-panel {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.tip-list {
+  display: grid;
   gap: 14px;
-  margin-top: 30px;
 }
 
-button {
-  border: none;
-  border-radius: 999px;
-  padding: 14px 24px;
+.tip-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.tip-item span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: var(--accent-primary);
+  font-size: 13px;
   font-weight: 900;
-  cursor: pointer;
-  transition: 0.2s ease;
+  background: rgba(17, 75, 95, 0.1);
 }
 
-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-}
-
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.secondary-btn {
-  color: #2563eb;
-  background: #eef4ff;
-}
-
-.recommend-btn {
-  color: white;
-  background: linear-gradient(135deg, #f97316, #fb923c);
-  box-shadow: 0 14px 30px rgba(249, 115, 22, 0.24);
-}
-
-@media (max-width: 720px) {
-  .upload-page {
-    padding: 36px 5%;
+@media (max-width: 980px) {
+  .intro-panel,
+  .upload-layout {
+    grid-template-columns: 1fr;
   }
 
-  .upload-card {
-    padding: 30px 22px;
-  }
-
-  h1 {
-    font-size: 34px;
-  }
-
-  .actions {
+  .intro-panel {
     flex-direction: column;
   }
 
-  button {
+  .intro-badges {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .intro-panel,
+  .upload-panel,
+  .tips-panel {
+    padding: 22px;
+  }
+
+  .upload-core {
+    padding: 24px 18px;
+  }
+
+  .success-actions {
+    display: grid;
+  }
+
+  .success-actions button {
     width: 100%;
   }
 }
