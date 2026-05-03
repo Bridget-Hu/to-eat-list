@@ -1,8 +1,14 @@
 # to-eat-list
 A personal takeout and nutrition planner
 
-# To-Eat-List
+# To-Eat-List🍱
 
+![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-Frontend-646CFF?logo=vite&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite&logoColor=white)
+
+一个面向校园外卖场景的个人饮食决策助手。
 一个帮助我在校园外卖场景下决定每天吃什么的个人饮食管理项目。
 
 ## 项目背景
