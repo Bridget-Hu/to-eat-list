@@ -1,18 +1,25 @@
-﻿# main.py
-
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes_health import router as health_router
-from app.api.routes_user import router as user_router
-from app.db.init_db import init_db
+from app.api.routes_daily import router as daily_record_router
+from app.api.routes_food import router as food_router
+from app.api.routes_recommend import router as recommend_router
 
 app = FastAPI(title="To-Eat-List API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.on_event("startup")
-def on_startup():
-    init_db()
+
+@app.get("/ping", tags=["health"])
+def ping():
+    return {"message": "pong"}
 
 
-app.include_router(health_router)
-app.include_router(user_router)
+app.include_router(food_router)
+app.include_router(recommend_router)
+app.include_router(daily_record_router)

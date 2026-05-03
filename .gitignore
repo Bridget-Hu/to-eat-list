@@ -137,3 +137,18 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environment
+venv/
+.venv/
+
+# SQLite database
+*.db
+
+# Frontend
+node_modules/
+dist/
