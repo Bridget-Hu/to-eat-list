@@ -126,12 +126,16 @@ npm run dev
 
 ## 开发配置
 
-前端通过 `VITE_API_BASE` 指向后端。
+仓库根目录提供了 `.env.example`，用于统一说明本地开发需要的环境变量。
 
-推荐在 `frontend/.env.local` 中配置：
+- `VITE_API_BASE`：前端请求后端的地址，开发时放到 `frontend/.env.local`
+- `DATABASE_URL`：后端数据库连接串，启动后端前在 shell 中注入
+
+推荐本地配置：
 
 ```env
 VITE_API_BASE=http://127.0.0.1:8000
+DATABASE_URL=sqlite:///./to_eat_list.db
 ```
 
 ## 后端接口
