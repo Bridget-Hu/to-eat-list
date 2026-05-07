@@ -35,28 +35,70 @@ const savingPreference = ref(false);
 const loadingPreference = ref(false);
 const lastSavedAt = ref("");
 
+const healthGoalOptions = [
+  { label: "无特殊目标", value: "" },
+  { label: "控制预算", value: "控制预算" },
+  { label: "吃得清淡", value: "吃得清淡" },
+  { label: "高蛋白", value: "高蛋白" },
+  { label: "低脂", value: "低脂" },
+  { label: "多蔬菜", value: "多蔬菜" },
+  { label: "少糖", value: "少糖" },
+  { label: "少油", value: "少油" },
+  { label: "吃饱一点", value: "吃饱一点" },
+  { label: "避免奶茶", value: "避免奶茶" },
+  { label: "适合赶时间", value: "适合赶时间" }
+];
+
 const mealCards = computed(() => {
   if (!result.value) {
     return [];
+  }
+
+  if (Array.isArray(result.value.meals) && result.value.meals.length > 0) {
+    return result.value.meals.map((meal) => ({
+      type: meal.type,
+      name: meal.name,
+      reason: meal.reason,
+      reasons: meal.reasons || [],
+      score: meal.score,
+      price: meal.price,
+      store: meal.store,
+      category: meal.category
+    }));
   }
 
   return [
     {
       type: "早餐",
       name: result.value.breakfast,
-      reason: result.value.breakfastReason
+      reason: result.value.breakfastReason,
+      reasons: []
     },
     {
       type: "午餐",
       name: result.value.lunch,
-      reason: result.value.lunchReason
+      reason: result.value.lunchReason,
+      reasons: []
     },
     {
       type: "晚餐",
       name: result.value.dinner,
-      reason: result.value.dinnerReason
+      reason: result.value.dinnerReason,
+      reasons: []
     }
   ];
+});
+
+const hasRecommendationResult = computed(() => {
+  if (!result.value) {
+    return false;
+  }
+
+  if (Array.isArray(result.value.recommendations)) {
+    return result.value.recommendations.length > 0;
+  }
+
+  return mealCards.value.some((meal) => !String(meal.name || "").startsWith("暂无"));
 });
 
 const tips = [
@@ -229,10 +271,13 @@ onMounted(() => {
           <label class="field-label">
             <span>健康目标</span>
             <select v-model="form.goal" class="field-select">
-              <option value="">无特殊目标</option>
-              <option value="减脂">减脂</option>
-              <option value="增肌">增肌</option>
-              <option value="均衡饮食">均衡饮食</option>
+              <option
+                v-for="option in healthGoalOptions"
+                :key="option.value || 'none'"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
             </select>
           </label>
 
@@ -309,6 +354,24 @@ onMounted(() => {
             <p>预算、口味、忌口和健康目标都会一起参与筛选。</p>
           </div>
 
+          <template v-else-if="result && !hasRecommendationResult">
+            <EmptyState
+              badge="暂无结果"
+              title="暂无符合条件的菜品"
+              description="可以尝试放宽预算、减少忌口，或先导入更多菜品。"
+            >
+              <template #actions>
+                <button
+                  class="button button--ghost"
+                  type="button"
+                  @click="router.push('/upload')"
+                >
+                  去导入菜品
+                </button>
+              </template>
+            </EmptyState>
+          </template>
+
           <template v-else-if="result">
             <div class="section-head result-head">
               <div>
@@ -332,9 +395,32 @@ onMounted(() => {
                 :key="meal.type"
                 class="meal-item"
               >
-                <span>{{ meal.type }}</span>
+                <div class="meal-item__meta">
+                  <span>{{ meal.type }}</span>
+                  <strong v-if="meal.score !== null && meal.score !== undefined">
+                    评分 {{ meal.score }}
+                  </strong>
+                </div>
                 <h3>{{ meal.name }}</h3>
-                <p>{{ meal.reason }}</p>
+                <p
+                  v-if="
+                    meal.store ||
+                    meal.category ||
+                    (meal.price !== null && meal.price !== undefined)
+                  "
+                >
+                  <template v-if="meal.store">{{ meal.store }}</template>
+                  <template v-if="meal.category"> · {{ meal.category }}</template>
+                  <template v-if="meal.price !== null && meal.price !== undefined">
+                    · {{ meal.price }} 元
+                  </template>
+                </p>
+                <ul v-if="meal.reasons?.length" class="reason-list">
+                  <li v-for="reason in meal.reasons" :key="`${meal.type}-${reason}`">
+                    {{ reason }}
+                  </li>
+                </ul>
+                <p v-else>{{ meal.reason }}</p>
               </article>
             </div>
 
@@ -510,7 +596,14 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.72);
 }
 
-.meal-item span {
+.meal-item__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.meal-item__meta span {
   display: inline-flex;
   min-height: 30px;
   padding: 6px 10px;
@@ -521,10 +614,42 @@ onMounted(() => {
   background: rgba(17, 75, 95, 0.08);
 }
 
+.meal-item__meta strong {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 .meal-item h3 {
   margin-top: 12px;
   font-size: 21px;
   line-height: 1.2;
+}
+
+.reason-list {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reason-list li {
+  position: relative;
+  padding-left: 14px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.reason-list li::before {
+  position: absolute;
+  top: 0.72em;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  content: "";
 }
 
 .result-summary {

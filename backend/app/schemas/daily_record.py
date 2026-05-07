@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MealRecordResponse(BaseModel):
@@ -6,6 +6,11 @@ class MealRecordResponse(BaseModel):
     name: str
     reason: str
     price: float | None = None
+    food_id: int | None = None
+    store: str | None = ""
+    category: str | None = ""
+    score: float | None = None
+    reasons: list[str] = Field(default_factory=list)
 
 
 class DailyRecordResponse(BaseModel):

@@ -15,7 +15,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.api.routes_daily import router as daily_record_router
 from app.api.routes_food import router as food_router
-from app.api.routes_recommend import router as recommend_router
+from app.api.routes_recommend import generate_router, router as recommend_router
 from app.api.routes_user import router as user_router
 from app.db.base import Base
 from app.db.session import get_db
@@ -39,6 +39,7 @@ def client():
     app = FastAPI()
     app.include_router(food_router)
     app.include_router(recommend_router)
+    app.include_router(generate_router)
     app.include_router(daily_record_router)
     app.include_router(user_router)
 
