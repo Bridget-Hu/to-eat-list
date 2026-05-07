@@ -2,8 +2,22 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.food_item import FoodImportResponse, FoodListResponse
-from app.services.food_store import clear_foods, import_foods_from_text, load_foods, replace_foods
+from app.schemas.food_item import (
+    FoodImportResponse,
+    FoodItemCreate,
+    FoodItemResponse,
+    FoodItemUpdate,
+    FoodListResponse,
+)
+from app.services.food_store import (
+    clear_foods,
+    create_food,
+    delete_food,
+    import_foods_from_text,
+    load_foods,
+    replace_foods,
+    update_food,
+)
 from app.services.legacy_data_loader import load_legacy_foods
 
 router = APIRouter(prefix="/foods", tags=["foods"])
@@ -15,8 +29,24 @@ def get_foods(db: Session = Depends(get_db)):
 
     return {
         "count": len(foods),
-        "data": foods
+        "data": foods,
     }
+
+
+@router.post("", response_model=FoodItemResponse)
+def create_food_item(data: FoodItemCreate, db: Session = Depends(get_db)):
+    return create_food(db, data)
+
+
+@router.put("/{food_id}", response_model=FoodItemResponse)
+def update_food_item(food_id: int, data: FoodItemUpdate, db: Session = Depends(get_db)):
+    return update_food(db, food_id, data)
+
+
+@router.delete("/{food_id}")
+def delete_food_item(food_id: int, db: Session = Depends(get_db)):
+    delete_food(db, food_id)
+    return {"message": "菜品已删除"}
 
 
 @router.delete("")

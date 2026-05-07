@@ -1,10 +1,15 @@
 <script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useMessage } from "naive-ui";
 
 import AppCard from "@/components/AppCard.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import PageHeader from "@/components/PageHeader.vue";
+import {
+  getLatestUserPreference,
+  saveUserPreference
+} from "@/api/userPreferences";
 import { requestJson } from "@/utils/api";
 
 defineOptions({
@@ -12,6 +17,7 @@ defineOptions({
 });
 
 const router = useRouter();
+const message = useMessage();
 
 const form = reactive({
   budget: 60,
@@ -25,6 +31,9 @@ const form = reactive({
 const result = ref(null);
 const loading = ref(false);
 const errorMessage = ref("");
+const savingPreference = ref(false);
+const loadingPreference = ref(false);
+const lastSavedAt = ref("");
 
 const mealCards = computed(() => {
   if (!result.value) {
@@ -76,6 +85,60 @@ function clearForm() {
   errorMessage.value = "";
 }
 
+function formatDateTime(value) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    return new Intl.DateTimeFormat("zh-CN", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function applyPreference(preference) {
+  form.budget = Number(preference.budget ?? 60);
+  form.taste = preference.taste || "";
+  form.dislike = preference.dislike || "";
+  form.want = preference.want || "";
+  form.goal = preference.goal || "";
+  form.hadMilkTea = Boolean(preference.hadMilkTea);
+  lastSavedAt.value = formatDateTime(preference.updatedAt || preference.createdAt);
+}
+
+async function loadLatestPreference() {
+  loadingPreference.value = true;
+
+  try {
+    const latestPreference = await getLatestUserPreference();
+    applyPreference(latestPreference);
+  } catch (error) {
+    if (!String(error.message || "").includes("还没有保存过用户偏好")) {
+      message.error(error.message || "读取最近一次偏好失败");
+    }
+  } finally {
+    loadingPreference.value = false;
+  }
+}
+
+async function submitPreference() {
+  savingPreference.value = true;
+
+  try {
+    const savedPreference = await saveUserPreference({ ...form });
+    applyPreference(savedPreference);
+    message.success("偏好已保存，下次打开会自动回显最近一次记录");
+  } catch (error) {
+    message.error(error.message || "保存偏好失败");
+  } finally {
+    savingPreference.value = false;
+  }
+}
+
 async function generateRecommend() {
   loading.value = true;
   errorMessage.value = "";
@@ -93,6 +156,10 @@ async function generateRecommend() {
     loading.value = false;
   }
 }
+
+onMounted(() => {
+  loadLatestPreference();
+});
 </script>
 
 <template>
@@ -107,6 +174,12 @@ async function generateRecommend() {
         <template #meta>
           <span class="status-pill status-pill--primary">生成后自动写入历史</span>
           <span class="status-pill status-pill--neutral">建议先导入完整菜品库</span>
+          <span v-if="lastSavedAt" class="status-pill status-pill--success">
+            最近保存：{{ lastSavedAt }}
+          </span>
+          <span v-else-if="loadingPreference" class="status-pill status-pill--neutral">
+            正在读取最近一次偏好
+          </span>
         </template>
 
         <template #actions>
@@ -204,6 +277,14 @@ async function generateRecommend() {
 
         <div class="form-footer">
           <div class="button-row">
+            <button
+              class="button button--secondary"
+              type="button"
+              :disabled="savingPreference"
+              @click="submitPreference"
+            >
+              {{ savingPreference ? "保存中..." : "保存今日偏好" }}
+            </button>
             <button
               class="button button--primary"
               type="button"

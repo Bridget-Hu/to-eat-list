@@ -26,7 +26,7 @@
   - `VITE_API_BASE`
   - `DATABASE_URL`
 
-- [ ] 清理未接通或仍是占位的模块
+- [x] 清理未接通或仍是占位的模块
   目前仍建议处理：
   - `backend/app/api/routes_email.py`
   - `backend/app/services/email_service.py`

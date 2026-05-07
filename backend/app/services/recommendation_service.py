@@ -1,9 +1,10 @@
 def food_text(food):
     return (
         f"{food.get('name', '')} "
+        f"{food.get('store', '')} "
         f"{food.get('category', '')} "
-        f"{food.get('taste', '')} "
-        f"{food.get('tags', '')} "
+        f"{food.get('taste_tags', '') or food.get('taste', '')} "
+        f"{food.get('health_tags', '') or food.get('tags', '')} "
         f"{food.get('note', '')}"
     )
 

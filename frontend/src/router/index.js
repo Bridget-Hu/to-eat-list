@@ -19,7 +19,7 @@ const routes = [
     name: "Upload",
     component: UploadPage,
     meta: {
-      label: "导入菜品"
+      label: "菜品管理"
     }
   },
   {
