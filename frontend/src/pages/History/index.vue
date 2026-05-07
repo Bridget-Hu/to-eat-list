@@ -2,6 +2,10 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
+import AppCard from "@/components/AppCard.vue";
+import EmptyState from "@/components/EmptyState.vue";
+import PageHeader from "@/components/PageHeader.vue";
+import StatCard from "@/components/StatCard.vue";
 import { requestJson } from "@/utils/api";
 
 defineOptions({
@@ -123,6 +127,11 @@ function formatCurrency(value) {
   return `${Number(value || 0).toFixed(1)} 元`;
 }
 
+function formatRecordTitle(record) {
+  const names = (record.meals || []).map((meal) => meal.name).filter(Boolean);
+  return names.length ? names.join(" / ") : "今日推荐记录";
+}
+
 async function loadRecords() {
   loading.value = true;
   errorMessage.value = "";
@@ -177,74 +186,61 @@ onMounted(() => {
 
 <template>
   <div class="page history-page">
-    <section class="panel hero-panel">
-      <div>
-        <p class="section-kicker">Recommendation Archive</p>
-        <h1 class="section-title">历史记录页现在接入了真实推荐结果。</h1>
-        <p class="section-desc">
-          每次生成推荐后，系统都会自动写入一条历史。你可以在这里回看最近吃了什么、预算控制得如何，以及哪些偏好出现得最多。
-        </p>
-      </div>
+    <AppCard tone="accent" padding="lg">
+      <PageHeader
+        eyebrow="Recommendation Archive"
+        title="历史记录页优先展示记录本身，而不是展示型大区块"
+        description="每次生成推荐后，系统都会自动写入一条历史。这里保留标题、操作、统计和筛选，但会把真正的记录列表尽量提到首屏。"
+        compact
+      >
+        <template #meta>
+          <span class="status-pill status-pill--primary">共 {{ records.length }} 条历史</span>
+          <span class="status-pill status-pill--neutral">
+            当前筛选后 {{ filteredRecords.length }} 条
+          </span>
+        </template>
 
-      <div class="hero-actions">
-        <button class="secondary-button" type="button" :disabled="loading" @click="loadRecords">
-          {{ loading ? "刷新中..." : "刷新记录" }}
-        </button>
+        <template #actions>
+          <button class="button button--secondary" type="button" :disabled="loading" @click="loadRecords">
+            {{ loading ? "刷新中..." : "刷新记录" }}
+          </button>
+          <button class="button button--ghost" type="button" @click="router.push('/recommend')">
+            去生成推荐
+          </button>
+          <button
+            class="button button--danger"
+            type="button"
+            :disabled="clearing || !records.length"
+            @click="clearHistory"
+          >
+            {{ clearing ? "清空中..." : "清空历史" }}
+          </button>
+        </template>
+      </PageHeader>
+    </AppCard>
 
-        <button class="ghost-button" type="button" @click="router.push('/recommend')">
-          去生成新的推荐
-        </button>
-
-        <button
-          class="ghost-button danger-button"
-          type="button"
-          :disabled="clearing || !records.length"
-          @click="clearHistory"
-        >
-          {{ clearing ? "清空中..." : "清空历史" }}
-        </button>
-      </div>
+    <section class="history-stats">
+      <StatCard label="累计推荐" :value="stats.total" hint="已经写入历史的推荐次数。" />
+      <StatCard label="平均预算" :value="`${stats.averageBudget} 元`" hint="按历史记录中的预算字段计算。" />
+      <StatCard label="平均花费" :value="`${stats.averageSpend} 元`" hint="按推荐结果中的总价估算。" />
+      <StatCard label="最常见目标" :value="stats.topGoal" hint="当前历史中最常出现的饮食方向。" />
     </section>
 
-    <section class="stats-grid">
-      <article class="panel stat-card">
-        <span>累计推荐</span>
-        <strong>{{ stats.total }}</strong>
-        <p>已写入历史的推荐次数</p>
-      </article>
-
-      <article class="panel stat-card">
-        <span>平均预算</span>
-        <strong>{{ stats.averageBudget }} 元</strong>
-        <p>按历史记录中的预算字段计算</p>
-      </article>
-
-      <article class="panel stat-card">
-        <span>平均花费</span>
-        <strong>{{ stats.averageSpend }} 元</strong>
-        <p>按推荐结果中的预计总价计算</p>
-      </article>
-
-      <article class="panel stat-card">
-        <span>最常见目标</span>
-        <strong>{{ stats.topGoal }}</strong>
-        <p>当前最常出现的饮食方向</p>
-      </article>
-    </section>
-
-    <section class="panel filter-panel">
-      <div class="filter-header">
+    <AppCard class="filter-card" padding="md">
+      <div class="filter-head">
         <div>
           <h2>筛选与搜索</h2>
-          <p>支持按关键词、目标和奶茶摄入状态快速回看记录。</p>
+          <p>按关键词、健康目标和奶茶状态快速定位记录。</p>
         </div>
 
-        <button class="ghost-button" type="button" @click="resetFilters">重置筛选</button>
+        <button class="button button--ghost" type="button" @click="resetFilters">
+          重置筛选
+        </button>
       </div>
 
       <div class="filter-grid">
         <label class="field-label">
-          搜索关键词
+          <span>搜索关键词</span>
           <input
             v-model="filters.keyword"
             class="field-input"
@@ -254,7 +250,7 @@ onMounted(() => {
         </label>
 
         <label class="field-label">
-          健康目标
+          <span>健康目标</span>
           <select v-model="filters.goal" class="field-select">
             <option value="">全部目标</option>
             <option v-for="goal in goalOptions" :key="goal" :value="goal">
@@ -264,7 +260,7 @@ onMounted(() => {
         </label>
 
         <label class="field-label">
-          奶茶状态
+          <span>奶茶状态</span>
           <select v-model="filters.milkTea" class="field-select">
             <option value="all">全部</option>
             <option value="had">当天已喝奶茶</option>
@@ -272,49 +268,57 @@ onMounted(() => {
           </select>
         </label>
       </div>
-    </section>
+    </AppCard>
 
-    <p v-if="errorMessage" class="panel error-banner">{{ errorMessage }}</p>
+    <p v-if="errorMessage" class="history-error">{{ errorMessage }}</p>
 
-    <section v-if="!loading && !filteredRecords.length" class="panel empty-panel">
-      <h2>还没有可展示的历史记录</h2>
-      <p>
-        {{ records.length ? "当前筛选条件下没有匹配结果，试试放宽条件。" : "先去生成一条推荐，历史页就会自动出现真实数据。" }}
-      </p>
+    <AppCard v-if="loading && !records.length" padding="lg">
+      <EmptyState
+        badge="加载中"
+        title="正在读取历史记录"
+        description="稍等一下，系统正在把最近的推荐记录取回来。"
+      />
+    </AppCard>
 
-      <button class="primary-button" type="button" @click="router.push('/recommend')">
-        去生成推荐
-      </button>
-    </section>
+    <AppCard v-else-if="!filteredRecords.length" padding="lg">
+      <EmptyState
+        :badge="records.length ? '暂无匹配结果' : '暂无历史记录'"
+        :title="records.length ? '当前筛选条件下没有匹配记录' : '还没有可展示的历史记录'"
+        :description="records.length ? '可以放宽筛选条件，或者直接搜索更少的关键词。' : '先去生成一条推荐，历史页就会自动沉淀真实数据。'"
+      >
+        <template #actions>
+          <button class="button button--primary" type="button" @click="router.push('/recommend')">
+            去生成推荐
+          </button>
+        </template>
+      </EmptyState>
+    </AppCard>
 
     <section v-else class="record-list">
-      <article
+      <AppCard
         v-for="record in filteredRecords"
         :key="record.id"
-        class="panel record-card"
+        class="record-card"
+        padding="md"
       >
         <div class="record-top">
-          <div>
+          <div class="record-heading">
             <span class="record-time">{{ formatDate(record.createdAt) }}</span>
-            <h2>
-              {{ (record.meals || []).map((meal) => meal.name).filter(Boolean).join(" · ") }}
-            </h2>
+            <h2>{{ formatRecordTitle(record) }}</h2>
           </div>
 
           <div class="record-tags">
-            <span class="status-pill neutral">预算 {{ formatCurrency(record.budget) }}</span>
-            <span class="status-pill success">预计花费 {{ formatCurrency(record.totalPrice) }}</span>
-            <span class="status-pill warning">
-              {{ record.goal || "无特殊目标" }}
-            </span>
+            <span class="status-pill status-pill--neutral">预算 {{ formatCurrency(record.budget) }}</span>
+            <span class="status-pill status-pill--success">花费 {{ formatCurrency(record.totalPrice) }}</span>
+            <span class="status-pill status-pill--warning">{{ record.goal || "无特殊目标" }}</span>
           </div>
         </div>
 
-        <div class="meal-grid">
+        <div class="record-meals">
           <article
             v-for="meal in record.meals || []"
             :key="`${record.id}-${meal.type}`"
-            class="meal-card"
+            class="meal-item"
           >
             <span>{{ meal.type }}</span>
             <strong>{{ meal.name }}</strong>
@@ -322,221 +326,185 @@ onMounted(() => {
           </article>
         </div>
 
-        <div class="meta-row">
+        <div class="record-meta">
           <span>口味偏好：{{ record.taste || "未填写" }}</span>
           <span>忌口：{{ record.dislike || "未填写" }}</span>
           <span>突然想吃：{{ record.want || "未填写" }}</span>
           <span>奶茶状态：{{ record.hadMilkTea ? "当天已喝奶茶" : "当天未喝奶茶" }}</span>
         </div>
 
-        <details class="summary-box">
+        <details class="record-summary">
           <summary>查看推荐总结</summary>
           <p>{{ record.summary }}</p>
         </details>
-      </article>
+      </AppCard>
     </section>
   </div>
 </template>
 
 <style scoped>
-.hero-panel,
-.filter-panel,
-.empty-panel,
-.record-card {
-  padding: 28px;
-}
-
-.hero-panel,
-.filter-header,
-.record-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: flex-start;
-}
-
-.hero-actions,
-.record-tags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.danger-button {
-  color: var(--danger);
-  box-shadow: inset 0 0 0 1px rgba(196, 69, 54, 0.12);
-}
-
-.stats-grid {
+.history-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.filter-card {
+  display: grid;
   gap: 16px;
 }
 
-.stat-card {
-  padding: 22px;
+.filter-head,
+.record-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
 }
 
-.stat-card span {
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.stat-card strong {
-  display: block;
-  margin-top: 12px;
-  font-size: 30px;
-  line-height: 1.1;
-}
-
-.stat-card p,
-.filter-header p,
-.meal-card p,
-.summary-box p,
-.empty-panel p {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  line-height: 1.75;
-}
-
-.filter-header h2,
-.record-top h2,
-.empty-panel h2,
-.meal-card strong {
+.filter-head h2,
+.record-heading h2,
+.meal-item strong {
   margin: 0;
+}
+
+.filter-head p,
+.meal-item p,
+.record-summary p {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.7;
 }
 
 .filter-grid {
   display: grid;
   grid-template-columns: 1.4fr 0.8fr 0.8fr;
-  gap: 16px;
-  margin-top: 22px;
-}
-
-.error-banner {
-  margin: 0;
-  padding: 16px 20px;
-  color: var(--danger);
-  font-weight: 800;
-}
-
-.empty-panel {
-  display: grid;
-  justify-items: start;
   gap: 14px;
+}
+
+.history-error {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(185, 77, 63, 0.12);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  background: rgba(185, 77, 63, 0.08);
+  font-weight: 700;
 }
 
 .record-list {
   display: grid;
+  gap: 14px;
+}
+
+.record-card {
+  display: grid;
   gap: 16px;
+}
+
+.record-heading {
+  display: grid;
+  gap: 10px;
 }
 
 .record-time {
   display: inline-flex;
-  margin-bottom: 10px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  color: var(--accent-primary);
-  font-size: 13px;
-  font-weight: 900;
-  background: rgba(17, 75, 95, 0.08);
-}
-
-.meal-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 18px;
-}
-
-.meal-card {
-  padding: 18px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.74);
-}
-
-.meal-card span {
-  display: inline-flex;
-  margin-bottom: 12px;
+  width: fit-content;
+  min-height: 32px;
   padding: 7px 11px;
   border-radius: 999px;
-  color: var(--accent-primary);
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 900;
   background: rgba(17, 75, 95, 0.08);
 }
 
-.meal-card strong {
-  display: block;
-  font-size: 20px;
+.record-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.meta-row {
+.record-meals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.meal-item {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.meal-item span {
+  display: inline-flex;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 900;
+  background: rgba(17, 75, 95, 0.08);
+}
+
+.meal-item strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.record-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 16px;
 }
 
-.meta-row span {
-  padding: 10px 14px;
+.record-meta span {
+  padding: 9px 12px;
   border-radius: 14px;
-  color: var(--text-secondary);
+  color: var(--color-text-muted);
   font-size: 14px;
-  background: rgba(255, 255, 255, 0.64);
+  background: rgba(255, 255, 255, 0.66);
 }
 
-.summary-box {
-  margin-top: 16px;
-  padding: 16px 18px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.64);
+.record-summary {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.6);
 }
 
-.summary-box summary {
+.record-summary summary {
   cursor: pointer;
   font-weight: 800;
 }
 
 @media (max-width: 1080px) {
-  .stats-grid,
-  .filter-grid,
-  .meal-grid {
+  .history-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 860px) {
-  .hero-panel,
-  .filter-header,
+@media (max-width: 900px) {
+  .filter-grid,
+  .record-meals {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-head,
   .record-top {
     flex-direction: column;
   }
 
-  .hero-actions,
   .record-tags {
     justify-content: flex-start;
-  }
-
-  .filter-grid {
-    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 640px) {
-  .hero-panel,
-  .filter-panel,
-  .empty-panel,
-  .record-card {
-    padding: 22px;
-  }
-
-  .stats-grid,
-  .meal-grid {
+  .history-stats {
     grid-template-columns: 1fr;
   }
 }

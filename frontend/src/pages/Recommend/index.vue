@@ -2,6 +2,9 @@
 import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
+import AppCard from "@/components/AppCard.vue";
+import EmptyState from "@/components/EmptyState.vue";
+import PageHeader from "@/components/PageHeader.vue";
 import { requestJson } from "@/utils/api";
 
 defineOptions({
@@ -47,6 +50,21 @@ const mealCards = computed(() => {
   ];
 });
 
+const tips = [
+  {
+    title: "预算给范围就够",
+    desc: "不需要精确到整数，系统会优先找更贴近预算的组合。"
+  },
+  {
+    title: "口味和突然想吃分开填",
+    desc: "前者描述长期偏好，后者描述今天的即时情绪。"
+  },
+  {
+    title: "忌口支持多个关键词",
+    desc: "可以用空格、顿号或逗号分隔，后端会逐项匹配。"
+  }
+];
+
 function clearForm() {
   form.budget = 60;
   form.taste = "";
@@ -70,7 +88,7 @@ async function generateRecommend() {
     });
   } catch (error) {
     errorMessage.value =
-      error.message || "生成失败，请确认后端已启动，并且已经导入菜品数据。";
+      error.message || "生成失败，请先确认后端已启动并且已经导入菜品数据。";
   } finally {
     loading.value = false;
   }
@@ -79,40 +97,53 @@ async function generateRecommend() {
 
 <template>
   <div class="page recommend-page">
-    <section class="panel hero-panel">
-      <div>
-        <p class="section-kicker">Recommendation Flow</p>
-        <h1 class="section-title">根据今天的状态，生成一份更像你的三餐方案。</h1>
-        <p class="section-desc">
-          预算、口味、忌口、健康目标和奶茶摄入都会参与匹配。生成成功后，结果会自动写入历史记录页，方便后续回顾。
-        </p>
-      </div>
+    <AppCard tone="accent" padding="lg">
+      <PageHeader
+        eyebrow="Recommendation Flow"
+        title="先填条件，再在同一屏里查看今天的推荐结果"
+        description="这一页现在按工具页来组织。左侧专注输入预算、口味、忌口和目标，右侧即时承接推荐结果、空状态和输入建议，减少来回滚动。"
+        compact
+      >
+        <template #meta>
+          <span class="status-pill status-pill--primary">生成后自动写入历史</span>
+          <span class="status-pill status-pill--neutral">建议先导入完整菜品库</span>
+        </template>
 
-      <div class="hero-actions">
-        <button class="ghost-button" type="button" @click="router.push('/upload')">
-          先去导入菜品
-        </button>
+        <template #actions>
+          <button
+            class="button button--ghost"
+            type="button"
+            @click="router.push('/upload')"
+          >
+            导入菜品
+          </button>
+          <button
+            class="button button--secondary"
+            type="button"
+            @click="router.push('/history')"
+          >
+            查看历史
+          </button>
+        </template>
+      </PageHeader>
+    </AppCard>
 
-        <button class="secondary-button" type="button" @click="router.push('/history')">
-          查看历史记录
-        </button>
-      </div>
-    </section>
-
-    <section class="recommend-layout">
-      <article class="panel form-panel">
-        <div class="panel-header">
+    <div class="recommend-layout">
+      <AppCard class="form-card" padding="lg">
+        <div class="section-head">
           <div>
-            <h2>填写推荐条件</h2>
-            <p>信息越贴近今天的真实状态，结果就越像你会自己选出来的那份菜单。</p>
+            <h2>推荐条件</h2>
+            <p>信息越贴近今天的真实状态，结果就越像你自己会选出来的那份菜单。</p>
           </div>
 
-          <button class="ghost-button" type="button" @click="clearForm">清空条件</button>
+          <button class="button button--ghost" type="button" @click="clearForm">
+            清空条件
+          </button>
         </div>
 
         <div class="form-grid">
           <label class="field-label">
-            今日预算 / 元
+            <span>今日预算 / 元</span>
             <input
               v-model.number="form.budget"
               class="field-input"
@@ -123,7 +154,7 @@ async function generateRecommend() {
           </label>
 
           <label class="field-label">
-            健康目标
+            <span>健康目标</span>
             <select v-model="form.goal" class="field-select">
               <option value="">无特殊目标</option>
               <option value="减脂">减脂</option>
@@ -133,7 +164,7 @@ async function generateRecommend() {
           </label>
 
           <label class="field-label">
-            口味偏好
+            <span>口味偏好</span>
             <input
               v-model="form.taste"
               class="field-input"
@@ -143,7 +174,7 @@ async function generateRecommend() {
           </label>
 
           <label class="field-label">
-            忌口关键词
+            <span>忌口关键词</span>
             <input
               v-model="form.dislike"
               class="field-input"
@@ -152,8 +183,8 @@ async function generateRecommend() {
             >
           </label>
 
-          <label class="field-label full-width">
-            今天突然很想吃
+          <label class="field-label form-grid__full">
+            <span>今天突然很想吃</span>
             <input
               v-model="form.want"
               class="field-input"
@@ -162,289 +193,299 @@ async function generateRecommend() {
             >
           </label>
 
-          <label class="milk-tea-toggle full-width">
+          <label class="milk-tea-toggle form-grid__full">
             <input v-model="form.hadMilkTea" type="checkbox">
-            <span>今天已经喝过奶茶，希望推荐时尽量避开高糖饮品</span>
+            <div>
+              <strong>今天已经喝过奶茶</strong>
+              <p>推荐时尽量回避高糖饮品，优先更轻的搭配。</p>
+            </div>
           </label>
         </div>
 
-        <div class="form-actions">
-          <button
-            class="primary-button"
-            type="button"
-            :disabled="loading"
-            @click="generateRecommend"
-          >
-            {{ loading ? "生成中..." : "生成今日推荐" }}
-          </button>
+        <div class="form-footer">
+          <div class="button-row">
+            <button
+              class="button button--primary"
+              type="button"
+              :disabled="loading"
+              @click="generateRecommend"
+            >
+              {{ loading ? "生成中..." : "生成今日推荐" }}
+            </button>
+          </div>
 
-          <span class="status-pill neutral">推荐完成后会自动保存到历史记录</span>
+          <span class="status-pill status-pill--neutral">推荐完成后会自动保存到历史记录</span>
         </div>
 
         <p v-if="errorMessage" class="error-text">{{ errorMessage }}</p>
-      </article>
+      </AppCard>
 
-      <aside class="panel tips-panel">
-        <h2>输入建议</h2>
+      <div class="result-column">
+        <AppCard class="result-card" padding="lg">
+          <div v-if="loading" class="result-loading">
+            <span class="status-pill status-pill--primary">正在生成</span>
+            <h2>正在根据你今天的条件匹配菜单</h2>
+            <p>预算、口味、忌口和健康目标都会一起参与筛选。</p>
+          </div>
 
-        <div class="tip-list">
-          <article class="tip-item">
-            <strong>预算不是越精确越好</strong>
-            <p>给一个今天能接受的范围即可，规则会优先找更贴近预算的菜品。</p>
-          </article>
+          <template v-else-if="result">
+            <div class="section-head result-head">
+              <div>
+                <h2>今日推荐结果</h2>
+                <p>生成成功后会自动写入历史记录，方便后续回看。</p>
+              </div>
 
-          <article class="tip-item">
-            <strong>口味和“突然想吃”可以分开填</strong>
-            <p>前者适合填长期偏好，后者更适合当天情绪化的小冲动。</p>
-          </article>
+              <div class="result-metrics">
+                <span class="status-pill status-pill--success">
+                  预计总价 {{ result.totalPrice ?? 0 }} 元
+                </span>
+                <span class="status-pill status-pill--neutral">
+                  预算剩余 {{ result.remainingBudget ?? 0 }} 元
+                </span>
+              </div>
+            </div>
 
-          <article class="tip-item">
-            <strong>忌口关键词支持多个</strong>
-            <p>可以用逗号、空格或顿号分隔，系统会自动拆分处理。</p>
-          </article>
-        </div>
-      </aside>
-    </section>
+            <div class="meal-grid">
+              <article
+                v-for="meal in mealCards"
+                :key="meal.type"
+                class="meal-item"
+              >
+                <span>{{ meal.type }}</span>
+                <h3>{{ meal.name }}</h3>
+                <p>{{ meal.reason }}</p>
+              </article>
+            </div>
 
-    <section v-if="result" class="panel result-panel">
-      <div class="result-header">
-        <div>
-          <p class="section-kicker">Generated Result</p>
-          <h2>今日推荐已经生成</h2>
-        </div>
+            <div class="result-summary">
+              <h3>推荐总结</h3>
+              <p>{{ result.summary }}</p>
 
-        <div class="result-metrics">
-          <span class="status-pill success">预计总价 {{ result.totalPrice ?? 0 }} 元</span>
-          <span class="status-pill neutral">预算结余 {{ result.remainingBudget ?? 0 }} 元</span>
-        </div>
+              <div class="button-row">
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  @click="router.push('/history')"
+                >
+                  去历史页查看
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <EmptyState
+            v-else
+            badge="等待生成"
+            title="先填写左侧条件，再生成今天的推荐"
+            description="推荐页首屏现在直接放出主要表单。你可以先从预算和目标开始填，剩下的偏好条件按需补充。"
+          >
+            <template #actions>
+              <button
+                class="button button--ghost"
+                type="button"
+                @click="router.push('/upload')"
+              >
+                还没导入菜品？
+              </button>
+            </template>
+          </EmptyState>
+        </AppCard>
+
+        <AppCard class="tips-card" padding="md" tone="muted">
+          <h2>输入建议</h2>
+
+          <div class="tip-list">
+            <article v-for="item in tips" :key="item.title" class="tip-item">
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.desc }}</p>
+            </article>
+          </div>
+        </AppCard>
       </div>
-
-      <div class="meal-grid">
-        <article v-for="meal in mealCards" :key="meal.type" class="meal-card">
-          <span>{{ meal.type }}</span>
-          <h3>{{ meal.name }}</h3>
-          <p>{{ meal.reason }}</p>
-        </article>
-      </div>
-
-      <div class="summary-card">
-        <h3>推荐总结</h3>
-        <p>{{ result.summary }}</p>
-
-        <div class="summary-actions">
-          <button class="secondary-button" type="button" @click="router.push('/history')">
-            去历史页查看
-          </button>
-        </div>
-      </div>
-    </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.hero-panel,
-.form-panel,
-.tips-panel,
-.result-panel {
-  padding: 30px;
-}
-
-.hero-panel {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
-}
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
 .recommend-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.62fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.02fr) minmax(320px, 0.98fr);
+  gap: 18px;
+  align-items: start;
 }
 
-.panel-header,
-.result-header {
+.form-card,
+.result-card,
+.tips-card {
+  display: grid;
+  gap: 18px;
+}
+
+.section-head {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
   align-items: flex-start;
 }
 
-.panel-header h2,
-.tips-panel h2,
-.result-header h2,
-.summary-card h3,
-.meal-card h3 {
+.section-head h2,
+.meal-item h3,
+.result-summary h3,
+.tips-card h2,
+.result-loading h2 {
   margin: 0;
 }
 
-.panel-header p,
+.section-head p,
+.meal-item p,
+.result-summary p,
 .tip-item p,
-.meal-card p,
-.summary-card p {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  line-height: 1.78;
+.result-loading p {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.7;
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 24px;
+  gap: 16px;
 }
 
-.full-width {
+.form-grid__full {
   grid-column: 1 / -1;
 }
 
 .milk-tea-toggle {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
   gap: 12px;
-  padding: 16px 18px;
-  border-radius: 20px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  background: rgba(255, 140, 66, 0.14);
+  align-items: start;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(240, 154, 74, 0.14);
 }
 
 .milk-tea-toggle input {
   width: 18px;
   height: 18px;
+  margin: 3px 0 0;
 }
 
-.form-actions {
+.milk-tea-toggle strong {
+  display: block;
+}
+
+.milk-tea-toggle p {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.form-footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
   align-items: center;
-  margin-top: 24px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .error-text {
-  margin: 18px 0 0;
-  color: var(--danger);
-  font-weight: 800;
+  margin: 0;
+  color: var(--color-danger);
+  font-weight: 700;
 }
 
-.tips-panel {
+.result-column {
   display: grid;
-  align-content: start;
   gap: 18px;
 }
 
-.tip-list {
-  display: grid;
-  gap: 14px;
-}
-
-.tip-item {
-  padding: 18px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.68);
-}
-
-.tip-item strong {
-  display: block;
+.result-head {
+  align-items: flex-start;
 }
 
 .result-metrics {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.result-loading {
+  display: grid;
   gap: 10px;
 }
 
 .meal-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 22px;
+  gap: 12px;
 }
 
-.meal-card {
-  padding: 22px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.76);
+.meal-item {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.meal-card span {
+.meal-item span {
   display: inline-flex;
-  padding: 8px 12px;
+  min-height: 30px;
+  padding: 6px 10px;
   border-radius: 999px;
-  color: var(--accent-primary);
-  font-size: 13px;
+  color: var(--color-primary);
+  font-size: 12px;
   font-weight: 900;
   background: rgba(17, 75, 95, 0.08);
 }
 
-.meal-card h3 {
-  margin-top: 14px;
-  font-size: 24px;
+.meal-item h3 {
+  margin-top: 12px;
+  font-size: 21px;
+  line-height: 1.2;
 }
 
-.summary-card {
-  margin-top: 18px;
-  padding: 22px;
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at right top, rgba(255, 140, 66, 0.12), transparent 40%),
-    rgba(255, 255, 255, 0.74);
+.result-summary {
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border);
 }
 
-.summary-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 18px;
+.tip-list {
+  display: grid;
+  gap: 12px;
 }
 
-@media (max-width: 980px) {
-  .hero-panel,
+.tip-item {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.tip-item strong {
+  display: block;
+}
+
+@media (max-width: 1040px) {
   .recommend-layout,
   .meal-grid {
     grid-template-columns: 1fr;
   }
-
-  .hero-panel,
-  .panel-header,
-  .result-header {
-    flex-direction: column;
-  }
-
-  .hero-actions,
-  .result-metrics {
-    justify-content: flex-start;
-  }
 }
 
-@media (max-width: 680px) {
-  .hero-panel,
-  .form-panel,
-  .tips-panel,
-  .result-panel {
-    padding: 22px;
+@media (max-width: 720px) {
+  .section-head,
+  .form-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .result-metrics {
+    justify-content: flex-start;
   }
 
   .form-grid {
     grid-template-columns: 1fr;
-  }
-
-  .form-actions,
-  .summary-actions {
-    display: grid;
-  }
-
-  .form-actions button,
-  .summary-actions button {
-    width: 100%;
   }
 }
 </style>
