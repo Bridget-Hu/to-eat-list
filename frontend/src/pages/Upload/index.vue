@@ -1,24 +1,211 @@
 <script setup>
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, ref } from "vue";
+import {
+  NAlert,
+  NButton,
+  NEmpty,
+  NInput,
+  NPopconfirm,
+  NSelect,
+  useMessage
+} from "naive-ui";
 
-import { API_BASE } from "@/utils/api";
+import {
+  batchDeleteFoods,
+  createFood,
+  deleteFood,
+  foodCategoryOptions,
+  listFoods,
+  updateFood,
+  uploadFoodFile
+} from "@/api/foods";
+import AppCard from "@/components/AppCard.vue";
+import FoodFormModal from "@/components/food/FoodFormModal.vue";
+import FoodTable from "@/components/food/FoodTable.vue";
+import PageHeader from "@/components/PageHeader.vue";
+import StatCard from "@/components/StatCard.vue";
 
 defineOptions({
   name: "UploadPage"
 });
 
-const router = useRouter();
+const message = useMessage();
 
+const foods = ref([]);
+const loadingFoods = ref(false);
+const savingFood = ref(false);
+const deletingFoods = ref(false);
+const selectedFoodIds = ref([]);
+const keyword = ref("");
+const selectedCategory = ref(null);
+const errorMessage = ref("");
+const uploadSummary = ref("");
+const selectedFileName = ref("");
 const fileInput = ref(null);
-const selectedFile = ref(null);
-const statusText = ref("请选择 txt / csv / json 文件");
-const statusType = ref("neutral");
-const loading = ref(false);
-const imported = ref(false);
-const importedCount = ref(0);
+const showFoodModal = ref(false);
+const modalMode = ref("create");
+const activeFood = ref(null);
 
-function openFilePicker() {
+const filteredFoods = computed(() => {
+  const search = keyword.value.trim().toLowerCase();
+
+  return foods.value.filter((food) => {
+    const matchesCategory =
+      !selectedCategory.value || food.category === selectedCategory.value;
+
+    if (!matchesCategory) {
+      return false;
+    }
+
+    if (!search) {
+      return true;
+    }
+
+    const text = [
+      food.name,
+      food.store,
+      food.category,
+      food.taste_tags,
+      food.health_tags,
+      food.note
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return text.includes(search);
+  });
+});
+
+const categoryFilterOptions = computed(() => {
+  const dynamicOptions = new Set(
+    foods.value.map((food) => food.category).filter(Boolean)
+  );
+
+  const knownOptions = foodCategoryOptions.map((item) => item.value);
+
+  return Array.from(new Set([...knownOptions, ...dynamicOptions])).map((value) => ({
+    label: value,
+    value
+  }));
+});
+
+const priceStats = computed(() => {
+  const foodsWithPrice = foods.value.filter((food) => Number(food.price) > 0);
+
+  if (!foodsWithPrice.length) {
+    return "0.0";
+  }
+
+  const totalPrice = foodsWithPrice.reduce(
+    (sum, food) => sum + Number(food.price || 0),
+    0
+  );
+
+  return (totalPrice / foodsWithPrice.length).toFixed(1);
+});
+
+const topCategory = computed(() => {
+  if (!foods.value.length) {
+    return "暂无";
+  }
+
+  const counts = foods.value.reduce((map, food) => {
+    const key = food.category || "其他";
+    map[key] = (map[key] || 0) + 1;
+    return map;
+  }, {});
+
+  return Object.entries(counts).sort((left, right) => right[1] - left[1])[0][0];
+});
+
+const selectedFoodCount = computed(() => selectedFoodIds.value.length);
+
+async function loadFoods() {
+  loadingFoods.value = true;
+  errorMessage.value = "";
+
+  try {
+    const response = await listFoods();
+    foods.value = Array.isArray(response?.data) ? response.data : [];
+    selectedFoodIds.value = selectedFoodIds.value.filter((foodId) =>
+      foods.value.some((food) => food.id === foodId)
+    );
+  } catch (error) {
+    errorMessage.value = error.message || "获取菜品列表失败";
+  } finally {
+    loadingFoods.value = false;
+  }
+}
+
+function openCreateModal() {
+  modalMode.value = "create";
+  activeFood.value = null;
+  showFoodModal.value = true;
+}
+
+function openEditModal(food) {
+  modalMode.value = "edit";
+  activeFood.value = { ...food };
+  showFoodModal.value = true;
+}
+
+function closeFoodModal() {
+  showFoodModal.value = false;
+  activeFood.value = null;
+}
+
+async function handleSubmitFood(payload) {
+  savingFood.value = true;
+
+  try {
+    if (modalMode.value === "edit" && activeFood.value?.id) {
+      await updateFood(activeFood.value.id, payload);
+      message.success("菜品已更新");
+    } else {
+      await createFood(payload);
+      message.success("菜品已新增");
+    }
+
+    closeFoodModal();
+    await loadFoods();
+  } catch (error) {
+    message.error(error.message || "保存菜品失败");
+  } finally {
+    savingFood.value = false;
+  }
+}
+
+async function handleDeleteFood(food) {
+  try {
+    await deleteFood(food.id);
+    message.success(`已删除“${food.name}”`);
+    await loadFoods();
+  } catch (error) {
+    message.error(error.message || "删除菜品失败");
+  }
+}
+
+async function handleBatchDeleteFoods() {
+  if (!selectedFoodIds.value.length) {
+    return;
+  }
+
+  deletingFoods.value = true;
+
+  try {
+    const response = await batchDeleteFoods(selectedFoodIds.value);
+    message.success(response?.message || `已删除 ${selectedFoodIds.value.length} 条菜品`);
+    selectedFoodIds.value = [];
+    await loadFoods();
+  } catch (error) {
+    message.error(error.message || "批量删除菜品失败");
+  } finally {
+    deletingFoods.value = false;
+  }
+}
+
+function triggerUpload() {
   fileInput.value?.click();
 }
 
@@ -26,335 +213,224 @@ async function handleFileChange(event) {
   const file = event.target.files?.[0];
 
   if (!file) {
-    selectedFile.value = null;
-    imported.value = false;
-    importedCount.value = 0;
-    statusText.value = "暂未选择文件";
-    statusType.value = "neutral";
     return;
   }
 
-  selectedFile.value = file;
-  imported.value = false;
-  importedCount.value = 0;
-  loading.value = true;
-  statusText.value = "正在解析并导入菜品数据...";
-  statusType.value = "warning";
+  selectedFileName.value = file.name;
+  uploadSummary.value = "";
 
   try {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const response = await fetch(`${API_BASE}/foods/upload`, {
-      method: "POST",
-      body: formData
-    });
-
-    let data = null;
-
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
-    }
-
-    if (!response.ok) {
-      throw new Error(data?.detail || data?.message || "导入失败，请检查文件格式。");
-    }
-
-    imported.value = true;
-    importedCount.value = data?.count ?? 0;
-    statusText.value = `导入成功，已写入 ${importedCount.value} 个菜品。`;
-    statusType.value = "success";
+    const response = await uploadFoodFile(file);
+    foods.value = Array.isArray(response?.data) ? response.data : [];
+    selectedFoodIds.value = [];
+    uploadSummary.value = `导入成功，当前菜品库共 ${response?.count ?? foods.value.length} 条数据。`;
+    message.success("菜品文件导入成功");
   } catch (error) {
-    imported.value = false;
-    importedCount.value = 0;
-    statusText.value = error.message || "导入失败，请确认后端服务已启动。";
-    statusType.value = "danger";
+    message.error(error.message || "导入菜品文件失败");
   } finally {
-    loading.value = false;
+    event.target.value = "";
   }
 }
+
+onMounted(() => {
+  loadFoods();
+});
 </script>
 
 <template>
-  <div class="page upload-page">
-    <section class="panel intro-panel">
-      <div>
-        <p class="section-kicker">Food Source</p>
-        <h1 class="section-title">先把菜品池整理好，推荐才会更靠谱。</h1>
-        <p class="section-desc">
-          上传文件后，系统会把菜品名称、分类、价格、口味和备注写入后端数据源，后续推荐和历史记录都会基于这一批数据工作。
-        </p>
-      </div>
+  <div class="page foods-page">
+    <input
+      ref="fileInput"
+      type="file"
+      accept=".txt,.csv,.json"
+      hidden
+      @change="handleFileChange"
+    >
 
-      <div class="intro-badges">
-        <span class="status-pill neutral">支持 txt / csv / json</span>
-        <span class="status-pill warning">建议先整理好列名与价格</span>
-      </div>
-    </section>
-
-    <section class="upload-layout">
-      <article class="panel upload-panel">
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".txt,.csv,.json"
-          hidden
-          @change="handleFileChange"
-        />
-
-        <div class="upload-core">
-          <div class="upload-icon">食</div>
-
-          <h2>导入外卖与食堂菜品</h2>
-          <p>
-            支持一次性把你常吃的早餐、午餐、晚餐、饮品和加餐整理进来，减少每天重复录入。
-          </p>
-
-          <button
-            class="primary-button"
-            type="button"
-            :disabled="loading"
-            @click="openFilePicker"
-          >
-            {{ loading ? "导入中..." : selectedFile ? "重新选择文件" : "选择文件并导入" }}
-          </button>
-        </div>
-
-        <div class="upload-status">
-          <div>
-            <span class="status-label">当前文件</span>
-            <strong>{{ selectedFile ? selectedFile.name : "尚未选择文件" }}</strong>
-          </div>
-
-          <span class="status-pill" :class="statusType">
-            {{ statusText }}
+    <AppCard padding="md" tone="accent">
+      <PageHeader
+        eyebrow="Food Management"
+        title="菜品管理"
+        description="首屏直接进入新增、搜索、筛选和编辑，不再把导入入口放成大面积宣传区。文件导入仍然保留，但现在只是补充入口。"
+        compact
+      >
+        <template #meta>
+          <span class="status-pill status-pill--primary">当前 {{ foods.length }} 条菜品</span>
+          <span class="status-pill status-pill--neutral">筛选后 {{ filteredFoods.length }} 条</span>
+          <span v-if="selectedFileName" class="status-pill status-pill--success">
+            最近导入：{{ selectedFileName }}
           </span>
-        </div>
+        </template>
 
-        <div class="panel success-panel" :class="{ visible: imported }">
-          <strong>导入完成</strong>
-          <p>
-            现在可以直接去生成推荐，或者稍后在历史记录页回看系统为你生成过的菜单。
-          </p>
-
-          <div class="success-actions">
-            <button class="secondary-button" type="button" @click="router.push('/')">
-              返回首页
-            </button>
-
-            <button
-              class="primary-button"
-              type="button"
-              :disabled="!imported"
-              @click="router.push('/recommend')"
-            >
-              开始生成推荐
-            </button>
+        <template #actions>
+          <div class="button-row">
+            <NButton type="primary" @click="openCreateModal">新增菜品</NButton>
+            <NButton secondary @click="triggerUpload">导入文件</NButton>
+            <NButton quaternary @click="loadFoods">刷新列表</NButton>
           </div>
-        </div>
-      </article>
+        </template>
+      </PageHeader>
+    </AppCard>
 
-      <aside class="panel tips-panel">
-        <h2>整理建议</h2>
-
-        <div class="tip-list">
-          <article class="tip-item">
-            <span>01</span>
-            <div>
-              <strong>补齐价格和分类</strong>
-              <p>这样推荐阶段才能更好地控制预算，并区分早午晚餐。</p>
-            </div>
-          </article>
-
-          <article class="tip-item">
-            <span>02</span>
-            <div>
-              <strong>口味标签尽量具体</strong>
-              <p>比如“清淡”“微辣”“高蛋白”，后端规则会直接参考这些关键词。</p>
-            </div>
-          </article>
-
-          <article class="tip-item">
-            <span>03</span>
-            <div>
-              <strong>备注写真实体验</strong>
-              <p>像“适合赶时间”“容易腻”“减脂友好”这类备注，会让推荐更像你自己的选择。</p>
-            </div>
-          </article>
-        </div>
-      </aside>
+    <section class="foods-stats">
+      <StatCard label="菜品总数" :value="foods.length" hint="当前已进入推荐池的数据量。" />
+      <StatCard label="平均价格" :value="`${priceStats} 元`" hint="只统计填写了价格的菜品。" />
+      <StatCard label="主要分类" :value="topCategory" hint="当前菜品库中数量最多的分类。" />
     </section>
+
+    <AppCard padding="md" class="foods-manager">
+      <div class="foods-toolbar">
+        <div class="foods-toolbar__filters">
+          <NInput
+            v-model:value="keyword"
+            clearable
+            placeholder="搜索菜名、店名、标签或备注"
+          />
+          <NSelect
+            v-model:value="selectedCategory"
+            clearable
+            :options="categoryFilterOptions"
+            placeholder="筛选分类"
+          />
+        </div>
+
+        <div class="foods-toolbar__actions">
+          <NButton type="primary" secondary @click="openCreateModal">新增菜品</NButton>
+          <NButton quaternary @click="triggerUpload">重新导入</NButton>
+          <NPopconfirm
+            :disabled="!selectedFoodCount"
+            @positive-click="handleBatchDeleteFoods"
+          >
+            <template #trigger>
+              <NButton
+                type="error"
+                secondary
+                :disabled="!selectedFoodCount"
+                :loading="deletingFoods"
+              >
+                批量删除{{ selectedFoodCount ? ` ${selectedFoodCount}` : "" }}
+              </NButton>
+            </template>
+            确认删除选中的 {{ selectedFoodCount }} 条菜品吗？
+          </NPopconfirm>
+        </div>
+      </div>
+
+      <NAlert v-if="uploadSummary" type="success" :show-icon="false">
+        {{ uploadSummary }}
+      </NAlert>
+
+      <NAlert v-if="errorMessage" type="error" :show-icon="false">
+        {{ errorMessage }}
+      </NAlert>
+
+      <div v-if="!loadingFoods && !filteredFoods.length" class="foods-empty">
+        <NEmpty
+          description="当前没有符合条件的菜品，试试新增一条或放宽搜索条件。"
+        />
+      </div>
+
+      <div v-else class="food-table-wrap">
+        <FoodTable
+          v-model:checked-row-keys="selectedFoodIds"
+          :foods="filteredFoods"
+          :loading="loadingFoods"
+          @edit="openEditModal"
+          @delete="handleDeleteFood"
+        />
+      </div>
+    </AppCard>
+
+    <FoodFormModal
+      :show="showFoodModal"
+      :mode="modalMode"
+      :food="activeFood"
+      :saving="savingFood"
+      @close="closeFoodModal"
+      @submit="handleSubmitFood"
+    />
   </div>
 </template>
 
 <style scoped>
-.intro-panel {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  align-items: flex-start;
-  padding: 30px;
+.foods-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.intro-badges {
+.foods-manager {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.foods-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.foods-toolbar__filters {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px);
+  gap: 12px;
+  min-width: 0;
+}
+
+.foods-toolbar__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
-.upload-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.62fr);
-  gap: 20px;
+.foods-empty {
+  padding: 28px 0 12px;
 }
 
-.upload-panel,
-.tips-panel {
-  padding: 28px;
+.food-table-wrap {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
-.upload-core {
-  display: grid;
-  justify-items: center;
-  gap: 16px;
-  padding: 32px;
-  border: 2px dashed rgba(17, 75, 95, 0.18);
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at top, rgba(255, 140, 66, 0.12), transparent 54%),
-    rgba(255, 255, 255, 0.7);
-  text-align: center;
+.food-table-wrap :deep(.n-data-table) {
+  min-width: 0;
 }
 
-.upload-icon {
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 24px;
-  color: white;
-  font-size: 28px;
-  font-weight: 900;
-  background: linear-gradient(135deg, var(--accent-secondary), #ffb36d);
-  box-shadow: 0 18px 34px rgba(255, 140, 66, 0.22);
-}
-
-.upload-core h2,
-.tips-panel h2,
-.success-panel strong,
-.tip-item strong {
-  margin: 0;
-}
-
-.upload-core p,
-.success-panel p,
-.tip-item p {
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.75;
-}
-
-.upload-status {
-  display: grid;
-  gap: 14px;
-  margin-top: 18px;
-  padding: 18px 20px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.68);
-}
-
-.status-label {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.success-panel {
-  display: none;
-  gap: 14px;
-  margin-top: 18px;
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.success-panel.visible {
-  display: grid;
-}
-
-.success-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.tips-panel {
-  display: grid;
-  align-content: start;
-  gap: 20px;
-}
-
-.tip-list {
-  display: grid;
-  gap: 14px;
-}
-
-.tip-item {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-  padding: 16px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.tip-item span {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  color: var(--accent-primary);
-  font-size: 13px;
-  font-weight: 900;
-  background: rgba(17, 75, 95, 0.1);
+.food-table-wrap :deep(.n-data-table-base-table-body) {
+  overflow-x: auto;
 }
 
 @media (max-width: 980px) {
-  .intro-panel,
-  .upload-layout {
+  .foods-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .foods-toolbar {
     grid-template-columns: 1fr;
   }
 
-  .intro-panel {
-    flex-direction: column;
-  }
-
-  .intro-badges {
+  .foods-toolbar__actions {
     justify-content: flex-start;
   }
 }
 
-@media (max-width: 640px) {
-  .intro-panel,
-  .upload-panel,
-  .tips-panel {
-    padding: 22px;
+@media (max-width: 720px) {
+  .foods-toolbar__filters {
+    grid-template-columns: 1fr;
   }
 
-  .upload-core {
-    padding: 24px 18px;
-  }
-
-  .success-actions {
+  .foods-toolbar__actions {
     display: grid;
   }
 
-  .success-actions button {
+  .foods-toolbar__actions > * {
     width: 100%;
   }
 }

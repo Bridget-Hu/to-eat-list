@@ -1,0 +1,137 @@
+[
+  {
+    "name": "豆浆",
+    "category": "早餐",
+    "price": 2,
+    "taste": "清淡、豆香",
+    "tags": "早餐、饮品、便宜",
+    "note": "早餐饮品，价格低",
+    "frequency_weight": 1
+  },
+  {
+    "name": "包子",
+    "category": "早餐",
+    "price": 2,
+    "taste": "咸香",
+    "tags": "早餐、主食、便宜",
+    "note": "适合早上快速解决",
+    "frequency_weight": 1
+  },
+  {
+    "name": "肉肠",
+    "category": "早餐",
+    "price": 2,
+    "taste": "咸香",
+    "tags": "早餐、肉类、便宜",
+    "note": "早餐加餐或搭配主食",
+    "frequency_weight": 1
+  },
+  {
+    "name": "冒菜",
+    "category": "午餐/晚餐",
+    "price": 29,
+    "taste": "麻辣",
+    "tags": "午餐、晚餐、主食、重口、辣",
+    "note": "适合想吃热辣正餐的时候",
+    "frequency_weight": 1
+  },
+  {
+    "name": "肥牛饭",
+    "category": "午餐/晚餐",
+    "price": 25,
+    "taste": "咸香",
+    "tags": "午餐、晚餐、米饭、牛肉、主食",
+    "note": "稳定的盖饭类选择",
+    "frequency_weight": 1
+  },
+  {
+    "name": "芝士年糕鸡",
+    "category": "午餐/晚餐",
+    "price": 25,
+    "taste": "咸香、芝士",
+    "tags": "午餐、晚餐、鸡肉、主食、芝士",
+    "note": "偏重口，适合想吃鸡肉和芝士的时候",
+    "frequency_weight": 1
+  },
+  {
+    "name": "小锅米线",
+    "category": "午餐/晚餐",
+    "price": 23,
+    "taste": "咸香、汤",
+    "tags": "午餐、晚餐、粉、主食、汤",
+    "note": "想吃粉面类时可以选",
+    "frequency_weight": 1
+  },
+  {
+    "name": "麦稻一荤一素",
+    "category": "午餐/晚餐",
+    "price": 30,
+    "taste": "家常",
+    "tags": "午餐、晚餐、套餐、米饭、蔬菜、肉类",
+    "note": "一荤一素，比较均衡",
+    "frequency_weight": 1
+  },
+  {
+    "name": "麻辣烫",
+    "category": "午餐/晚餐",
+    "price": 30,
+    "taste": "麻辣",
+    "tags": "午餐、晚餐、主食、可自选、辣",
+    "note": "可自由搭配，忌辣时少选",
+    "frequency_weight": 1
+  },
+  {
+    "name": "疯狂星期四",
+    "category": "午餐/晚餐",
+    "price": 30,
+    "taste": "咸香、油炸",
+    "tags": "午餐、晚餐、炸鸡、油炸、快餐",
+    "note": "适合想吃快餐炸物的时候",
+    "frequency_weight": 1
+  },
+  {
+    "name": "炸鸡",
+    "category": "午餐/晚餐",
+    "price": 25,
+    "taste": "咸香、油炸",
+    "tags": "午餐、晚餐、鸡肉、油炸、快餐",
+    "note": "油炸类，健康目标为低脂时会降权",
+    "frequency_weight": 1
+  },
+  {
+    "name": "牛扒意面",
+    "category": "午餐/晚餐",
+    "price": 28,
+    "taste": "咸香",
+    "tags": "午餐、晚餐、牛肉、面、主食",
+    "note": "想吃西式正餐时可以选",
+    "frequency_weight": 1
+  },
+  {
+    "name": "茉莉奶白大杯",
+    "category": "奶茶",
+    "price": 18,
+    "taste": "甜、茶香",
+    "tags": "奶茶、饮品、高糖",
+    "note": "奶茶类，已喝奶茶或少糖目标会降权",
+    "frequency_weight": 1
+  },
+  {
+    "name": "茶理宜世纯茶",
+    "category": "奶茶",
+    "price": 16,
+    "taste": "清爽、茶",
+    "tags": "奶茶、饮品、茶、少糖",
+    "note": "纯茶类，相对清爽",
+    "frequency_weight": 1
+  },
+  {
+    "name": "小黄油拿铁",
+    "category": "奶茶",
+    "price": 17,
+    "taste": "奶香、咖啡",
+    "tags": "奶茶、饮品、咖啡",
+    "note": "咖啡奶饮类",
+    "frequency_weight": 1
+  }
+]

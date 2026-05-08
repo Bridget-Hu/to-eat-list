@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -52,6 +53,41 @@ def test_import_sample_json(client):
     }
 
 
+def test_user_preferences_can_be_saved_and_latest_can_be_loaded(client):
+    empty_response = client.get("/user/preferences/latest")
+
+    assert empty_response.status_code == 404
+
+    payload = {
+        "budget": 48,
+        "taste": "清淡",
+        "dislike": "香菜",
+        "goal": "减脂",
+        "hadMilkTea": True,
+        "want": "米饭",
+    }
+
+    create_response = client.post("/user/preferences", json=payload)
+
+    assert create_response.status_code == 200
+
+    created = create_response.json()
+
+    assert created["budget"] == pytest.approx(payload["budget"])
+    assert created["taste"] == payload["taste"]
+    assert created["dislike"] == payload["dislike"]
+    assert created["goal"] == payload["goal"]
+    assert created["hadMilkTea"] is payload["hadMilkTea"]
+    assert created["want"] == payload["want"]
+    assert created["createdAt"]
+    assert created["updatedAt"]
+
+    latest_response = client.get("/user/preferences/latest")
+
+    assert latest_response.status_code == 200
+    assert latest_response.json()["id"] == created["id"]
+
+
 def test_upload_food_file_imports_rows(client):
     csv_text = "\n".join(
         [
@@ -90,6 +126,111 @@ def test_upload_food_file_imports_rows(client):
         "count": 3,
         "data": response_body["data"],
     }
+
+
+def test_food_crud_supports_validation_update_and_delete(client):
+    create_payload = {
+        "name": "鸡胸能量碗",
+        "store": "轻食窗口",
+        "price": 19.5,
+        "category": "主食",
+        "taste_tags": "清淡,咸香",
+        "health_tags": ["高蛋白", "低脂"],
+        "note": "午餐常点",
+    }
+
+    create_response = client.post("/foods", json=create_payload)
+
+    assert create_response.status_code == 200
+
+    created_food = create_response.json()
+
+    assert created_food["name"] == create_payload["name"]
+    assert created_food["store"] == create_payload["store"]
+    assert created_food["price"] == pytest.approx(create_payload["price"])
+    assert created_food["taste_tags"] == "清淡、咸香"
+    assert created_food["health_tags"] == "高蛋白、低脂"
+
+    duplicate_response = client.post("/foods", json=create_payload)
+
+    assert duplicate_response.status_code == 400
+    assert "同名菜品" in duplicate_response.json()["detail"]
+
+    invalid_price_response = client.post(
+        "/foods",
+        json={
+            "name": "无效价格菜品",
+            "price": 0,
+            "category": "其他",
+        },
+    )
+
+    assert invalid_price_response.status_code == 422
+
+    update_response = client.put(
+        f"/foods/{created_food['id']}",
+        json={
+            "price": 21.0,
+            "store": "轻食二窗口",
+            "health_tags": "高蛋白,蔬菜多",
+        },
+    )
+
+    assert update_response.status_code == 200
+
+    updated_food = update_response.json()
+
+    assert updated_food["price"] == pytest.approx(21.0)
+    assert updated_food["store"] == "轻食二窗口"
+    assert updated_food["health_tags"] == "高蛋白、蔬菜多"
+
+    list_response = client.get("/foods")
+
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 1
+
+    delete_response = client.delete(f"/foods/{created_food['id']}")
+
+    assert delete_response.status_code == 200
+
+    cleared_list_response = client.get("/foods")
+
+    assert cleared_list_response.status_code == 200
+    assert cleared_list_response.json() == {
+        "count": 0,
+        "data": [],
+    }
+
+
+def test_foods_can_be_batch_deleted(client):
+    created_ids = []
+
+    for name in ["豆浆", "包子", "肉肠"]:
+        response = client.post(
+            "/foods",
+            json={
+                "name": name,
+                "price": 2,
+                "category": "早餐",
+            },
+        )
+
+        assert response.status_code == 200
+        created_ids.append(response.json()["id"])
+
+    response = client.post(
+        "/foods/batch-delete",
+        json={"ids": created_ids[:2]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 2
+
+    list_response = client.get("/foods")
+
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 1
+    assert list_response.json()["data"][0]["name"] == "肉肠"
 
 
 def test_recommendation_persists_history_and_history_can_be_cleared(client):
@@ -154,7 +295,51 @@ def test_recommendation_persists_history_and_history_can_be_cleared(client):
     assert record["summary"] == response_body["summary"]
     assert record["totalPrice"] == pytest.approx(response_body["totalPrice"])
     assert record["remainingBudget"] == pytest.approx(response_body["remainingBudget"])
+    assert record["actualChoice"] == ""
     assert record["meals"] == response_body["meals"]
+
+    record_date = datetime.fromisoformat(record["createdAt"]).date().isoformat()
+    filtered_history_response = client.get(
+        "/daily-records",
+        params={
+            "start_date": record_date,
+            "end_date": record_date,
+        },
+    )
+
+    assert filtered_history_response.status_code == 200
+    assert filtered_history_response.json()["count"] == 1
+    assert filtered_history_response.json()["data"][0]["id"] == record["id"]
+
+    empty_filtered_history_response = client.get(
+        "/daily-records",
+        params={
+            "start_date": "2999-01-01",
+            "end_date": "2999-01-02",
+        },
+    )
+
+    assert empty_filtered_history_response.status_code == 200
+    assert empty_filtered_history_response.json() == {
+        "count": 0,
+        "data": [],
+    }
+
+    actual_choice_response = client.patch(
+        f"/daily-records/{record['id']}/actual-choice",
+        json={"actualChoice": "香煎鸡胸饭"},
+    )
+
+    assert actual_choice_response.status_code == 200
+    assert actual_choice_response.json()["actualChoice"] == "香煎鸡胸饭"
+
+    overview_response = client.get("/stats/overview")
+
+    assert overview_response.status_code == 200
+    assert overview_response.json() == {
+        "food_count": 3,
+        "history_count": 1,
+    }
 
     clear_response = client.delete("/daily-records")
 

@@ -25,4 +25,5 @@ class DailyRecord(Base):
     total_price = Column(Float, nullable=False, default=0)
     remaining_budget = Column(Float, nullable=False, default=0)
     summary = Column(Text, nullable=True)
+    actual_choice = Column(Text, nullable=True)
     meals = Column(JSON, nullable=False, default=list)
