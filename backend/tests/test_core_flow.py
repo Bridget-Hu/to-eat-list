@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -201,6 +202,37 @@ def test_food_crud_supports_validation_update_and_delete(client):
     }
 
 
+def test_foods_can_be_batch_deleted(client):
+    created_ids = []
+
+    for name in ["豆浆", "包子", "肉肠"]:
+        response = client.post(
+            "/foods",
+            json={
+                "name": name,
+                "price": 2,
+                "category": "早餐",
+            },
+        )
+
+        assert response.status_code == 200
+        created_ids.append(response.json()["id"])
+
+    response = client.post(
+        "/foods/batch-delete",
+        json={"ids": created_ids[:2]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 2
+
+    list_response = client.get("/foods")
+
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 1
+    assert list_response.json()["data"][0]["name"] == "肉肠"
+
+
 def test_recommendation_persists_history_and_history_can_be_cleared(client):
     upload_response = upload_fixture_foods(client, "recommendation_foods.json")
 
@@ -263,7 +295,51 @@ def test_recommendation_persists_history_and_history_can_be_cleared(client):
     assert record["summary"] == response_body["summary"]
     assert record["totalPrice"] == pytest.approx(response_body["totalPrice"])
     assert record["remainingBudget"] == pytest.approx(response_body["remainingBudget"])
+    assert record["actualChoice"] == ""
     assert record["meals"] == response_body["meals"]
+
+    record_date = datetime.fromisoformat(record["createdAt"]).date().isoformat()
+    filtered_history_response = client.get(
+        "/daily-records",
+        params={
+            "start_date": record_date,
+            "end_date": record_date,
+        },
+    )
+
+    assert filtered_history_response.status_code == 200
+    assert filtered_history_response.json()["count"] == 1
+    assert filtered_history_response.json()["data"][0]["id"] == record["id"]
+
+    empty_filtered_history_response = client.get(
+        "/daily-records",
+        params={
+            "start_date": "2999-01-01",
+            "end_date": "2999-01-02",
+        },
+    )
+
+    assert empty_filtered_history_response.status_code == 200
+    assert empty_filtered_history_response.json() == {
+        "count": 0,
+        "data": [],
+    }
+
+    actual_choice_response = client.patch(
+        f"/daily-records/{record['id']}/actual-choice",
+        json={"actualChoice": "香煎鸡胸饭"},
+    )
+
+    assert actual_choice_response.status_code == 200
+    assert actual_choice_response.json()["actualChoice"] == "香煎鸡胸饭"
+
+    overview_response = client.get("/stats/overview")
+
+    assert overview_response.status_code == 200
+    assert overview_response.json() == {
+        "food_count": 3,
+        "history_count": 1,
+    }
 
     clear_response = client.delete("/daily-records")
 

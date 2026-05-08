@@ -12,6 +12,7 @@ SCORE_WEIGHTS = {
     "avoid_penalty": -80,
     "avoid_exclusion": -10000,
     "meal_type": 12,
+    "frequency": 16,
 }
 
 KEYWORD_SYNONYMS = DEFAULT_KEYWORD_SYNONYMS

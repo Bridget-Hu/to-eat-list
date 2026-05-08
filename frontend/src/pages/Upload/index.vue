@@ -5,12 +5,13 @@ import {
   NButton,
   NEmpty,
   NInput,
+  NPopconfirm,
   NSelect,
-  NSpace,
   useMessage
 } from "naive-ui";
 
 import {
+  batchDeleteFoods,
   createFood,
   deleteFood,
   foodCategoryOptions,
@@ -33,6 +34,8 @@ const message = useMessage();
 const foods = ref([]);
 const loadingFoods = ref(false);
 const savingFood = ref(false);
+const deletingFoods = ref(false);
+const selectedFoodIds = ref([]);
 const keyword = ref("");
 const selectedCategory = ref(null);
 const errorMessage = ref("");
@@ -116,6 +119,8 @@ const topCategory = computed(() => {
   return Object.entries(counts).sort((left, right) => right[1] - left[1])[0][0];
 });
 
+const selectedFoodCount = computed(() => selectedFoodIds.value.length);
+
 async function loadFoods() {
   loadingFoods.value = true;
   errorMessage.value = "";
@@ -123,6 +128,9 @@ async function loadFoods() {
   try {
     const response = await listFoods();
     foods.value = Array.isArray(response?.data) ? response.data : [];
+    selectedFoodIds.value = selectedFoodIds.value.filter((foodId) =>
+      foods.value.some((food) => food.id === foodId)
+    );
   } catch (error) {
     errorMessage.value = error.message || "获取菜品列表失败";
   } finally {
@@ -178,6 +186,25 @@ async function handleDeleteFood(food) {
   }
 }
 
+async function handleBatchDeleteFoods() {
+  if (!selectedFoodIds.value.length) {
+    return;
+  }
+
+  deletingFoods.value = true;
+
+  try {
+    const response = await batchDeleteFoods(selectedFoodIds.value);
+    message.success(response?.message || `已删除 ${selectedFoodIds.value.length} 条菜品`);
+    selectedFoodIds.value = [];
+    await loadFoods();
+  } catch (error) {
+    message.error(error.message || "批量删除菜品失败");
+  } finally {
+    deletingFoods.value = false;
+  }
+}
+
 function triggerUpload() {
   fileInput.value?.click();
 }
@@ -195,6 +222,7 @@ async function handleFileChange(event) {
   try {
     const response = await uploadFoodFile(file);
     foods.value = Array.isArray(response?.data) ? response.data : [];
+    selectedFoodIds.value = [];
     uploadSummary.value = `导入成功，当前菜品库共 ${response?.count ?? foods.value.length} 条数据。`;
     message.success("菜品文件导入成功");
   } catch (error) {
@@ -252,21 +280,40 @@ onMounted(() => {
 
     <AppCard padding="md" class="foods-manager">
       <div class="foods-toolbar">
-        <NInput
-          v-model:value="keyword"
-          clearable
-          placeholder="搜索菜名、店名、标签或备注"
-        />
-        <NSelect
-          v-model:value="selectedCategory"
-          clearable
-          :options="categoryFilterOptions"
-          placeholder="筛选分类"
-        />
-        <NSpace>
+        <div class="foods-toolbar__filters">
+          <NInput
+            v-model:value="keyword"
+            clearable
+            placeholder="搜索菜名、店名、标签或备注"
+          />
+          <NSelect
+            v-model:value="selectedCategory"
+            clearable
+            :options="categoryFilterOptions"
+            placeholder="筛选分类"
+          />
+        </div>
+
+        <div class="foods-toolbar__actions">
           <NButton type="primary" secondary @click="openCreateModal">新增菜品</NButton>
           <NButton quaternary @click="triggerUpload">重新导入</NButton>
-        </NSpace>
+          <NPopconfirm
+            :disabled="!selectedFoodCount"
+            @positive-click="handleBatchDeleteFoods"
+          >
+            <template #trigger>
+              <NButton
+                type="error"
+                secondary
+                :disabled="!selectedFoodCount"
+                :loading="deletingFoods"
+              >
+                批量删除{{ selectedFoodCount ? ` ${selectedFoodCount}` : "" }}
+              </NButton>
+            </template>
+            确认删除选中的 {{ selectedFoodCount }} 条菜品吗？
+          </NPopconfirm>
+        </div>
       </div>
 
       <NAlert v-if="uploadSummary" type="success" :show-icon="false">
@@ -283,13 +330,15 @@ onMounted(() => {
         />
       </div>
 
-      <FoodTable
-        v-else
-        :foods="filteredFoods"
-        :loading="loadingFoods"
-        @edit="openEditModal"
-        @delete="handleDeleteFood"
-      />
+      <div v-else class="food-table-wrap">
+        <FoodTable
+          v-model:checked-row-keys="selectedFoodIds"
+          :foods="filteredFoods"
+          :loading="loadingFoods"
+          @edit="openEditModal"
+          @delete="handleDeleteFood"
+        />
+      </div>
     </AppCard>
 
     <FoodFormModal
@@ -313,17 +362,47 @@ onMounted(() => {
 .foods-manager {
   display: grid;
   gap: 16px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .foods-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(200px, 0.7fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.foods-toolbar__filters {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px);
   gap: 12px;
-  align-items: center;
+  min-width: 0;
+}
+
+.foods-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .foods-empty {
   padding: 28px 0 12px;
+}
+
+.food-table-wrap {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.food-table-wrap :deep(.n-data-table) {
+  min-width: 0;
+}
+
+.food-table-wrap :deep(.n-data-table-base-table-body) {
+  overflow-x: auto;
 }
 
 @media (max-width: 980px) {
@@ -332,10 +411,27 @@ onMounted(() => {
   }
 }
 
-@media (max-width: 820px) {
+@media (max-width: 1100px) {
   .foods-toolbar {
     grid-template-columns: 1fr;
-    align-items: stretch;
+  }
+
+  .foods-toolbar__actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .foods-toolbar__filters {
+    grid-template-columns: 1fr;
+  }
+
+  .foods-toolbar__actions {
+    display: grid;
+  }
+
+  .foods-toolbar__actions > * {
+    width: 100%;
   }
 }
 </style>

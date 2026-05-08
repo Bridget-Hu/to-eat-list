@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.food_item import (
+    FoodBatchDeleteRequest,
+    FoodBatchDeleteResponse,
     FoodImportResponse,
     FoodItemCreate,
     FoodItemResponse,
@@ -13,6 +15,7 @@ from app.services.food_store import (
     clear_foods,
     create_food,
     delete_food,
+    delete_foods_by_ids,
     import_foods_from_text,
     load_foods,
     replace_foods,
@@ -41,6 +44,16 @@ def create_food_item(data: FoodItemCreate, db: Session = Depends(get_db)):
 @router.put("/{food_id}", response_model=FoodItemResponse)
 def update_food_item(food_id: int, data: FoodItemUpdate, db: Session = Depends(get_db)):
     return update_food(db, food_id, data)
+
+
+@router.post("/batch-delete", response_model=FoodBatchDeleteResponse)
+def batch_delete_food_items(data: FoodBatchDeleteRequest, db: Session = Depends(get_db)):
+    deleted_count = delete_foods_by_ids(db, data.ids)
+
+    return {
+        "message": f"已删除 {deleted_count} 条菜品",
+        "deleted_count": deleted_count,
+    }
 
 
 @router.delete("/{food_id}")

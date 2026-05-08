@@ -1,28 +1,42 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { NDatePicker, useMessage } from "naive-ui";
 
 import AppCard from "@/components/AppCard.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import PageHeader from "@/components/PageHeader.vue";
 import StatCard from "@/components/StatCard.vue";
-import { requestJson } from "@/utils/api";
+import {
+  clearDailyRecords,
+  listDailyRecords,
+  updateDailyRecordActualChoice
+} from "@/api/history";
+import { emptyCopy, errorCopy } from "@/utils/copy";
 
 defineOptions({
   name: "HistoryPage"
 });
 
 const router = useRouter();
+const message = useMessage();
 
 const loading = ref(false);
 const clearing = ref(false);
 const errorMessage = ref("");
 const records = ref([]);
+const savingActualChoiceId = ref(null);
+const actualChoiceDrafts = reactive({});
 
 const filters = reactive({
+  dateRange: null,
   keyword: "",
   goal: "",
   milkTea: "all"
+});
+
+const hasDateFilter = computed(() => {
+  return Array.isArray(filters.dateRange) && filters.dateRange.some(Boolean);
 });
 
 const goalOptions = computed(() => {
@@ -61,6 +75,7 @@ const filteredRecords = computed(() => {
       record.taste,
       record.dislike,
       record.want,
+      getActualChoice(record),
       ...(record.meals || []).flatMap((meal) => [meal.type, meal.name, meal.reason])
     ]
       .filter(Boolean)
@@ -69,6 +84,30 @@ const filteredRecords = computed(() => {
 
     return text.includes(keyword);
   });
+});
+
+const emptyState = computed(() => {
+  if (hasDateFilter.value && !records.value.length) {
+    return {
+      badge: "日期范围无记录",
+      title: emptyCopy.historyDateRangeTitle,
+      description: emptyCopy.historyDateRangeDescription
+    };
+  }
+
+  if (records.value.length) {
+    return {
+      badge: "暂无匹配结果",
+      title: emptyCopy.historyFilteredTitle,
+      description: emptyCopy.historyFilteredDescription
+    };
+  }
+
+  return {
+    badge: "暂无历史记录",
+    title: emptyCopy.historyAllTitle,
+    description: emptyCopy.historyAllDescription
+  };
 });
 
 const stats = computed(() => {
@@ -123,13 +162,65 @@ function formatDate(value) {
   }
 }
 
+function formatDateParam(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function formatCurrency(value) {
   return `${Number(value || 0).toFixed(1)} 元`;
 }
 
 function formatRecordTitle(record) {
-  const names = (record.meals || []).map((meal) => meal.name).filter(Boolean);
+  const names = (record.meals || [])
+    .filter((meal) => Number(meal.rank || 1) === 1)
+    .map((meal) => meal.name)
+    .filter(Boolean);
+
+  if (!names.length) {
+    names.push(...(record.meals || []).map((meal) => meal.name).filter(Boolean).slice(0, 3));
+  }
+
   return names.length ? names.join(" / ") : "今日推荐记录";
+}
+
+function getActualChoice(record) {
+  return (
+    record.actualChoice ||
+    record.finalChoice ||
+    record.selectedFood ||
+    record.chosenFood ||
+    ""
+  );
+}
+
+function syncActualChoiceDrafts() {
+  Object.keys(actualChoiceDrafts).forEach((key) => {
+    delete actualChoiceDrafts[key];
+  });
+
+  records.value.forEach((record) => {
+    actualChoiceDrafts[record.id] = getActualChoice(record);
+  });
+}
+
+function getHistoryQueryOptions() {
+  const [startDate, endDate] = Array.isArray(filters.dateRange)
+    ? filters.dateRange
+    : [];
+
+  return {
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate)
+  };
 }
 
 async function loadRecords() {
@@ -137,10 +228,11 @@ async function loadRecords() {
   errorMessage.value = "";
 
   try {
-    const data = await requestJson("/daily-records");
+    const data = await listDailyRecords(getHistoryQueryOptions());
     records.value = Array.isArray(data?.data) ? data.data : [];
+    syncActualChoiceDrafts();
   } catch (error) {
-    errorMessage.value = error.message || "获取历史记录失败。";
+    errorMessage.value = error.message || errorCopy.historyLoad;
   } finally {
     loading.value = false;
   }
@@ -161,23 +253,118 @@ async function clearHistory() {
   errorMessage.value = "";
 
   try {
-    await requestJson("/daily-records", {
-      method: "DELETE"
-    });
+    await clearDailyRecords();
 
     records.value = [];
+    syncActualChoiceDrafts();
   } catch (error) {
-    errorMessage.value = error.message || "清空历史记录失败。";
+    errorMessage.value = error.message || errorCopy.historyClear;
   } finally {
     clearing.value = false;
   }
 }
 
 function resetFilters() {
+  filters.dateRange = null;
   filters.keyword = "";
   filters.goal = "";
   filters.milkTea = "all";
 }
+
+async function saveActualChoice(record) {
+  savingActualChoiceId.value = record.id;
+  errorMessage.value = "";
+
+  try {
+    const updatedRecord = await updateDailyRecordActualChoice(
+      record.id,
+      actualChoiceDrafts[record.id] || ""
+    );
+    const index = records.value.findIndex((item) => item.id === record.id);
+
+    if (index >= 0) {
+      records.value[index] = updatedRecord;
+    }
+
+    actualChoiceDrafts[record.id] = getActualChoice(updatedRecord);
+    message.success("实际选择已保存。");
+  } catch (error) {
+    message.error(error.message || errorCopy.historyActualChoiceSave);
+  } finally {
+    savingActualChoiceId.value = null;
+  }
+}
+
+function formatRecommendation(record) {
+  const meals = record.meals || [];
+
+  if (!meals.length) {
+    return record.summary || "";
+  }
+
+  return meals
+    .map((meal) => `${meal.type || "餐品"}：${meal.name || "暂无"}`)
+    .join("；");
+}
+
+function toCsvCell(value) {
+  const text = String(value ?? "").replace(/\r?\n/g, " ");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function exportHistory() {
+  const exportRecords = filteredRecords.value;
+
+  if (!exportRecords.length) {
+    message.warning("暂无可导出的历史记录。");
+    return;
+  }
+
+  const rows = [
+    [
+      "日期",
+      "预算",
+      "口味偏好",
+      "奶茶情况",
+      "营养目标",
+      "临时想吃",
+      "推荐结果",
+      "最终选择 / 实际选择"
+    ],
+    ...exportRecords.map((record) => [
+      formatDate(record.createdAt),
+      Number(record.budget || 0).toFixed(1),
+      record.taste || "未填写",
+      record.hadMilkTea ? "当天已喝奶茶" : "当天未喝奶茶",
+      record.goal || "无特殊目标",
+      record.want || "未填写",
+      formatRecommendation(record),
+      getActualChoice(record) || "暂无记录"
+    ])
+  ];
+
+  const csv = `\ufeff${rows.map((row) => row.map(toCsvCell).join(",")).join("\n")}`;
+  const blob = new Blob([csv], {
+    type: "text/csv;charset=utf-8"
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const fileDate = formatDateParam(Date.now()).replaceAll("-", "");
+
+  link.href = url;
+  link.download = `to-eat-list-history-${fileDate}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+  message.success("已导出当前筛选结果。");
+}
+
+watch(
+  () => filters.dateRange,
+  () => {
+    loadRecords();
+  },
+  { deep: true }
+);
 
 onMounted(() => {
   loadRecords();
@@ -203,6 +390,14 @@ onMounted(() => {
         <template #actions>
           <button class="button button--secondary" type="button" :disabled="loading" @click="loadRecords">
             {{ loading ? "刷新中..." : "刷新记录" }}
+          </button>
+          <button
+            class="button button--secondary"
+            type="button"
+            :disabled="loading || !filteredRecords.length"
+            @click="exportHistory"
+          >
+            导出 CSV
           </button>
           <button class="button button--ghost" type="button" @click="router.push('/recommend')">
             去生成推荐
@@ -239,6 +434,18 @@ onMounted(() => {
       </div>
 
       <div class="filter-grid">
+        <label class="field-label">
+          <span>日期范围</span>
+          <NDatePicker
+            v-model:value="filters.dateRange"
+            class="date-picker"
+            type="daterange"
+            clearable
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+          />
+        </label>
+
         <label class="field-label">
           <span>搜索关键词</span>
           <input
@@ -282,9 +489,9 @@ onMounted(() => {
 
     <AppCard v-else-if="!filteredRecords.length" padding="lg">
       <EmptyState
-        :badge="records.length ? '暂无匹配结果' : '暂无历史记录'"
-        :title="records.length ? '当前筛选条件下没有匹配记录' : '还没有可展示的历史记录'"
-        :description="records.length ? '可以放宽筛选条件，或者直接搜索更少的关键词。' : '先去生成一条推荐，历史页就会自动沉淀真实数据。'"
+        :badge="emptyState.badge"
+        :title="emptyState.title"
+        :description="emptyState.description"
       >
         <template #actions>
           <button class="button button--primary" type="button" @click="router.push('/recommend')">
@@ -311,18 +518,37 @@ onMounted(() => {
             <span class="status-pill status-pill--neutral">预算 {{ formatCurrency(record.budget) }}</span>
             <span class="status-pill status-pill--success">花费 {{ formatCurrency(record.totalPrice) }}</span>
             <span class="status-pill status-pill--warning">{{ record.goal || "无特殊目标" }}</span>
+            <span class="status-pill status-pill--primary">
+              最终选择：{{ getActualChoice(record) || "暂无记录" }}
+            </span>
           </div>
         </div>
 
         <div class="record-meals">
           <article
-            v-for="meal in record.meals || []"
-            :key="`${record.id}-${meal.type}`"
+            v-for="(meal, index) in record.meals || []"
+            :key="`${record.id}-${meal.type}-${meal.rank || index}-${meal.name}`"
             class="meal-item"
           >
-            <span>{{ meal.type }}</span>
+            <span>{{ meal.type }} {{ meal.rank || 1 }}</span>
             <strong>{{ meal.name }}</strong>
-            <p>{{ meal.reason }}</p>
+            <p
+              v-if="
+                meal.store ||
+                meal.category ||
+                (meal.price !== null && meal.price !== undefined)
+              "
+            >
+              <template v-if="meal.store">{{ meal.store }}</template>
+              <template v-if="meal.category"> · {{ meal.category }}</template>
+              <template v-if="meal.price !== null && meal.price !== undefined">
+                · {{ meal.price }} 元
+              </template>
+            </p>
+            <details class="meal-detail">
+              <summary>详情</summary>
+              <p>{{ meal.reason }}</p>
+            </details>
           </article>
         </div>
 
@@ -331,6 +557,28 @@ onMounted(() => {
           <span>忌口：{{ record.dislike || "未填写" }}</span>
           <span>突然想吃：{{ record.want || "未填写" }}</span>
           <span>奶茶状态：{{ record.hadMilkTea ? "当天已喝奶茶" : "当天未喝奶茶" }}</span>
+        </div>
+
+        <div class="actual-choice-panel">
+          <label class="field-label">
+            <span>最终选择 / 实际选择</span>
+            <input
+              v-model="actualChoiceDrafts[record.id]"
+              class="field-input"
+              type="text"
+              maxlength="240"
+              placeholder="例如 最后点了香煎鸡胸饭"
+            >
+          </label>
+
+          <button
+            class="button button--secondary"
+            type="button"
+            :disabled="savingActualChoiceId === record.id"
+            @click="saveActualChoice(record)"
+          >
+            {{ savingActualChoiceId === record.id ? "保存中..." : "保存实际选择" }}
+          </button>
         </div>
 
         <details class="record-summary">
@@ -378,8 +626,12 @@ onMounted(() => {
 
 .filter-grid {
   display: grid;
-  grid-template-columns: 1.4fr 0.8fr 0.8fr;
+  grid-template-columns: 1.1fr 1.2fr 0.8fr 0.8fr;
   gap: 14px;
+}
+
+.date-picker {
+  width: 100%;
 }
 
 .history-error {
@@ -433,6 +685,9 @@ onMounted(() => {
 }
 
 .meal-item {
+  display: grid;
+  align-content: start;
+  gap: 10px;
   padding: 16px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.72);
@@ -451,9 +706,25 @@ onMounted(() => {
 
 .meal-item strong {
   display: block;
-  margin-top: 12px;
   font-size: 18px;
   line-height: 1.25;
+}
+
+.meal-item p {
+  margin: 0;
+}
+
+.meal-detail {
+  padding-top: 8px;
+  border-top: 1px solid rgba(17, 75, 95, 0.08);
+}
+
+.meal-detail summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .record-meta {
@@ -468,6 +739,16 @@ onMounted(() => {
   color: var(--color-text-muted);
   font-size: 14px;
   background: rgba(255, 255, 255, 0.66);
+}
+
+.actual-choice-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: rgba(17, 75, 95, 0.05);
 }
 
 .record-summary {
@@ -489,7 +770,8 @@ onMounted(() => {
 
 @media (max-width: 900px) {
   .filter-grid,
-  .record-meals {
+  .record-meals,
+  .actual-choice-panel {
     grid-template-columns: 1fr;
   }
 

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
+import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
 
@@ -10,7 +11,9 @@ import {
   getLatestUserPreference,
   saveUserPreference
 } from "@/api/userPreferences";
+import { useSavedConditionsStore } from "@/stores/savedConditions";
 import { requestJson } from "@/utils/api";
+import { emptyCopy, errorCopy } from "@/utils/copy";
 
 defineOptions({
   name: "RecommendPage"
@@ -18,6 +21,9 @@ defineOptions({
 
 const router = useRouter();
 const message = useMessage();
+const savedConditionsStore = useSavedConditionsStore();
+const { conditions: savedConditions, count: savedConditionCount } =
+  storeToRefs(savedConditionsStore);
 
 const form = reactive({
   budget: 60,
@@ -34,6 +40,8 @@ const errorMessage = ref("");
 const savingPreference = ref(false);
 const loadingPreference = ref(false);
 const lastSavedAt = ref("");
+const savedConditionName = ref("");
+const selectedConditionId = ref("");
 
 const healthGoalOptions = [
   { label: "无特殊目标", value: "" },
@@ -59,6 +67,7 @@ const mealCards = computed(() => {
       type: meal.type,
       name: meal.name,
       reason: meal.reason,
+      rank: Number(meal.rank || 1),
       reasons: meal.reasons || [],
       score: meal.score,
       price: meal.price,
@@ -72,18 +81,21 @@ const mealCards = computed(() => {
       type: "早餐",
       name: result.value.breakfast,
       reason: result.value.breakfastReason,
+      rank: 1,
       reasons: []
     },
     {
       type: "午餐",
       name: result.value.lunch,
       reason: result.value.lunchReason,
+      rank: 1,
       reasons: []
     },
     {
       type: "晚餐",
       name: result.value.dinner,
       reason: result.value.dinnerReason,
+      rank: 1,
       reasons: []
     }
   ];
@@ -125,6 +137,7 @@ function clearForm() {
   form.hadMilkTea = false;
   result.value = null;
   errorMessage.value = "";
+  selectedConditionId.value = "";
 }
 
 function formatDateTime(value) {
@@ -142,14 +155,72 @@ function formatDateTime(value) {
   }
 }
 
+function applyFormValues(values = {}) {
+  form.budget = Number(values.budget ?? 60);
+  form.taste = values.taste || "";
+  form.dislike = values.dislike || "";
+  form.want = values.want || "";
+  form.goal = values.goal || "";
+  form.hadMilkTea = Boolean(values.hadMilkTea);
+}
+
 function applyPreference(preference) {
-  form.budget = Number(preference.budget ?? 60);
-  form.taste = preference.taste || "";
-  form.dislike = preference.dislike || "";
-  form.want = preference.want || "";
-  form.goal = preference.goal || "";
-  form.hadMilkTea = Boolean(preference.hadMilkTea);
+  applyFormValues(preference);
   lastSavedAt.value = formatDateTime(preference.updatedAt || preference.createdAt);
+}
+
+function snapshotForm() {
+  return {
+    budget: form.budget,
+    taste: form.taste,
+    dislike: form.dislike,
+    want: form.want,
+    goal: form.goal,
+    hadMilkTea: form.hadMilkTea
+  };
+}
+
+function applySavedCondition(condition) {
+  applyFormValues(condition.form);
+  selectedConditionId.value = condition.id;
+  result.value = null;
+  errorMessage.value = "";
+  message.success(`已填入“${condition.name}”`);
+}
+
+function saveCurrentCondition() {
+  const name = savedConditionName.value.trim();
+
+  if (!name) {
+    message.warning("请先填写常用条件名称。");
+    return;
+  }
+
+  const saved = savedConditionsStore.saveCondition(name, snapshotForm());
+
+  if (!saved) {
+    message.error(savedConditionsStore.storageError || errorCopy.savedConditionsWrite);
+    return;
+  }
+
+  selectedConditionId.value = saved.id;
+  savedConditionName.value = "";
+  message.success("常用条件已保存。");
+}
+
+function deleteSavedCondition(condition) {
+  const deleted = savedConditionsStore.deleteCondition(condition.id);
+
+  if (!deleted) {
+    message.error(savedConditionsStore.storageError || errorCopy.savedConditionsWrite);
+    return;
+  }
+
+  if (selectedConditionId.value === condition.id) {
+    selectedConditionId.value = "";
+  }
+
+  message.success(`已删除“${condition.name}”。`);
 }
 
 async function loadLatestPreference() {
@@ -160,7 +231,7 @@ async function loadLatestPreference() {
     applyPreference(latestPreference);
   } catch (error) {
     if (!String(error.message || "").includes("还没有保存过用户偏好")) {
-      message.error(error.message || "读取最近一次偏好失败");
+      message.error(error.message || errorCopy.preferenceLoad);
     }
   } finally {
     loadingPreference.value = false;
@@ -175,7 +246,7 @@ async function submitPreference() {
     applyPreference(savedPreference);
     message.success("偏好已保存，下次打开会自动回显最近一次记录");
   } catch (error) {
-    message.error(error.message || "保存偏好失败");
+    message.error(error.message || errorCopy.preferenceSave);
   } finally {
     savingPreference.value = false;
   }
@@ -192,14 +263,19 @@ async function generateRecommend() {
       body: JSON.stringify(form)
     });
   } catch (error) {
-    errorMessage.value =
-      error.message || "生成失败，请先确认后端已启动并且已经导入菜品数据。";
+    errorMessage.value = error.message || errorCopy.recommendationGenerate;
   } finally {
     loading.value = false;
   }
 }
 
 onMounted(() => {
+  savedConditionsStore.loadConditions();
+
+  if (savedConditionsStore.storageError) {
+    message.warning(savedConditionsStore.storageError);
+  }
+
   loadLatestPreference();
 });
 </script>
@@ -320,6 +396,76 @@ onMounted(() => {
           </label>
         </div>
 
+        <section class="saved-conditions">
+          <div class="saved-conditions__head">
+            <div>
+              <h3>常用条件</h3>
+              <p>把常填的预算、口味和目标保存下来，下次一键填入。</p>
+            </div>
+
+            <span class="status-pill status-pill--neutral">
+              {{ savedConditionCount }} 个模板
+            </span>
+          </div>
+
+          <div class="save-condition-row">
+            <label class="field-label">
+              <span>条件名称</span>
+              <input
+                v-model="savedConditionName"
+                class="field-input"
+                type="text"
+                maxlength="24"
+                placeholder="例如 工作日午餐"
+              >
+            </label>
+
+            <button
+              class="button button--secondary"
+              type="button"
+              @click="saveCurrentCondition"
+            >
+              保存为常用条件
+            </button>
+          </div>
+
+          <div v-if="!savedConditions.length" class="saved-conditions__empty">
+            <strong>{{ emptyCopy.savedConditionsTitle }}</strong>
+            <p>{{ emptyCopy.savedConditionsDescription }}</p>
+          </div>
+
+          <div v-else class="saved-condition-list">
+            <article
+              v-for="condition in savedConditions"
+              :key="condition.id"
+              class="saved-condition-item"
+              :class="{ 'saved-condition-item--active': selectedConditionId === condition.id }"
+            >
+              <div>
+                <strong>{{ condition.name }}</strong>
+                <span>{{ formatDateTime(condition.updatedAt) || "刚刚保存" }}</span>
+              </div>
+
+              <div class="saved-condition-actions">
+                <button
+                  class="button button--ghost"
+                  type="button"
+                  @click="applySavedCondition(condition)"
+                >
+                  填入
+                </button>
+                <button
+                  class="button button--danger"
+                  type="button"
+                  @click="deleteSavedCondition(condition)"
+                >
+                  删除
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+
         <div class="form-footer">
           <div class="button-row">
             <button
@@ -392,11 +538,11 @@ onMounted(() => {
             <div class="meal-grid">
               <article
                 v-for="meal in mealCards"
-                :key="meal.type"
+                :key="`${meal.type}-${meal.rank}-${meal.name}`"
                 class="meal-item"
               >
                 <div class="meal-item__meta">
-                  <span>{{ meal.type }}</span>
+                  <span>{{ meal.type }} {{ meal.rank }}</span>
                   <strong v-if="meal.score !== null && meal.score !== undefined">
                     评分 {{ meal.score }}
                   </strong>
@@ -415,12 +561,15 @@ onMounted(() => {
                     · {{ meal.price }} 元
                   </template>
                 </p>
-                <ul v-if="meal.reasons?.length" class="reason-list">
-                  <li v-for="reason in meal.reasons" :key="`${meal.type}-${reason}`">
-                    {{ reason }}
-                  </li>
-                </ul>
-                <p v-else>{{ meal.reason }}</p>
+                <details class="meal-detail">
+                  <summary>查看详情</summary>
+                  <ul v-if="meal.reasons?.length" class="reason-list">
+                    <li v-for="reason in meal.reasons" :key="`${meal.type}-${reason}`">
+                      {{ reason }}
+                    </li>
+                  </ul>
+                  <p v-else>{{ meal.reason }}</p>
+                </details>
               </article>
             </div>
 
@@ -504,7 +653,6 @@ onMounted(() => {
 }
 
 .section-head p,
-.meal-item p,
 .result-summary p,
 .tip-item p,
 .result-loading p {
@@ -521,6 +669,86 @@ onMounted(() => {
 
 .form-grid__full {
   grid-column: 1 / -1;
+}
+
+.saved-conditions {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.saved-conditions__head,
+.save-condition-row,
+.saved-condition-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.saved-conditions__head h3,
+.saved-conditions__empty strong,
+.saved-condition-item strong {
+  margin: 0;
+}
+
+.saved-conditions__head p,
+.saved-conditions__empty p,
+.saved-condition-item span {
+  margin: 7px 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.save-condition-row {
+  align-items: end;
+}
+
+.save-condition-row .field-label {
+  flex: 1;
+}
+
+.saved-conditions__empty {
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  background: rgba(17, 75, 95, 0.05);
+}
+
+.saved-condition-list {
+  display: grid;
+  gap: 10px;
+}
+
+.saved-condition-item {
+  padding: 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.saved-condition-item--active {
+  border-color: rgba(17, 75, 95, 0.2);
+  background: rgba(17, 75, 95, 0.07);
+}
+
+.saved-condition-item span {
+  display: block;
+  font-size: 13px;
+}
+
+.saved-condition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.saved-condition-actions .button {
+  min-height: 38px;
+  padding: 9px 14px;
 }
 
 .milk-tea-toggle {
@@ -591,6 +819,10 @@ onMounted(() => {
 }
 
 .meal-item {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 190px;
   padding: 16px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.72);
@@ -620,9 +852,29 @@ onMounted(() => {
 }
 
 .meal-item h3 {
-  margin-top: 12px;
+  margin-top: 0;
   font-size: 21px;
   line-height: 1.2;
+}
+
+.meal-item p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.meal-detail {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(17, 75, 95, 0.08);
+}
+
+.meal-detail summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .reason-list {
@@ -681,7 +933,10 @@ onMounted(() => {
 
 @media (max-width: 720px) {
   .section-head,
-  .form-footer {
+  .form-footer,
+  .saved-conditions__head,
+  .save-condition-row,
+  .saved-condition-item {
     flex-direction: column;
     align-items: stretch;
   }
@@ -692,6 +947,14 @@ onMounted(() => {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .saved-condition-actions {
+    justify-content: stretch;
+  }
+
+  .saved-condition-actions .button {
+    flex: 1;
   }
 }
 </style>

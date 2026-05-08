@@ -32,6 +32,7 @@ FOOD_TEXT_FIELDS = (
 )
 
 MEAL_TYPES = ("早餐", "午餐", "晚餐")
+MEAL_OPTIONS_PER_TYPE = 3
 
 
 @dataclass(frozen=True)
@@ -307,6 +308,25 @@ def _score_meal_type(food, meal_type, raw_text, keyword_set):
     return score, reasons
 
 
+def _score_frequency(food):
+    try:
+        weight = float(food.get("frequency_weight") or 1.0)
+    except (TypeError, ValueError):
+        weight = 1.0
+
+    weight = min(3.0, max(0.5, weight))
+
+    if weight == 1.0:
+        return 0, []
+
+    score = round((weight - 1.0) * SCORE_WEIGHTS["frequency"], 2)
+
+    if score > 0:
+        return score, [f"推荐权重 {weight:g}，提高出现频率"]
+
+    return score, [f"推荐权重 {weight:g}，降低出现频率"]
+
+
 def score_food(food, context, meal_type=None):
     raw_text = food_text(food)
     keyword_set = food_keywords(food)
@@ -334,6 +354,10 @@ def score_food(food, context, meal_type=None):
     meal_score, meal_reasons = _score_meal_type(food, meal_type, raw_text, keyword_set)
     score += meal_score
     reasons.extend(meal_reasons)
+
+    frequency_score, frequency_reasons = _score_frequency(food)
+    score += frequency_score
+    reasons.extend(frequency_reasons)
 
     taste_score, taste_reasons = _score_taste(context, raw_text, keyword_set)
     score += taste_score
@@ -411,6 +435,7 @@ def _empty_meal_payload(meal_type):
         "type": meal_type,
         "name": f"暂无合适{meal_type}",
         "reason": _reason_text(reasons),
+        "rank": 1,
         "price": None,
         "food_id": None,
         "store": "",
@@ -420,7 +445,7 @@ def _empty_meal_payload(meal_type):
     }
 
 
-def _meal_payload(meal_type, scored_food):
+def _meal_payload(meal_type, scored_food, rank=1):
     if scored_food is None:
         return _empty_meal_payload(meal_type)
 
@@ -430,6 +455,7 @@ def _meal_payload(meal_type, scored_food):
         "type": meal_type,
         "name": payload["name"],
         "reason": _reason_text(payload["reasons"]),
+        "rank": rank,
         "price": payload["price"],
         "food_id": payload["food_id"],
         "store": payload["store"],
@@ -439,28 +465,52 @@ def _meal_payload(meal_type, scored_food):
     }
 
 
-def _choose_meal_food(foods, context, meal_type, used_ids):
+def _food_matches_meal_type(food, meal_type):
+    category = str(food.get("category") or "").lower()
+    raw_text = food_text(food)
+
+    return meal_type.lower() in category or meal_type.lower() in raw_text
+
+
+def _choose_meal_foods(foods, context, meal_type, used_ids, limit=MEAL_OPTIONS_PER_TYPE):
+    available_foods = [
+        food for food in foods
+        if food.get("id") not in used_ids
+    ]
+    matched_foods = [
+        food for food in available_foods
+        if _food_matches_meal_type(food, meal_type)
+    ]
+    candidate_foods = matched_foods or available_foods
     scored_foods = [
         score_food(food, context, meal_type)
-        for food in foods
-        if food.get("id") not in used_ids
+        for food in candidate_foods
     ]
     ranked_foods = _rank_scored_foods(scored_foods)
 
-    if not ranked_foods:
-        return None
+    selected_foods = []
 
-    best_food = ranked_foods[0]
+    for scored_food in ranked_foods:
+        if scored_food["score"] <= MIN_RECOMMENDABLE_SCORE:
+            continue
 
-    if best_food["score"] <= MIN_RECOMMENDABLE_SCORE:
-        return None
+        selected_foods.append(scored_food)
+        food_id = scored_food["food"].get("id")
 
-    food_id = best_food["food"].get("id")
+        if food_id is not None:
+            used_ids.add(food_id)
 
-    if food_id is not None:
-        used_ids.add(food_id)
+        if len(selected_foods) >= limit:
+            break
 
-    return best_food
+    return selected_foods
+
+
+def _primary_meals(meals):
+    return [
+        next((meal for meal in meals if meal["type"] == meal_type and meal["rank"] == 1), None)
+        for meal_type in MEAL_TYPES
+    ]
 
 
 def generate_recommendations(data, foods):
@@ -473,11 +523,22 @@ def generate_recommendations(data, foods):
         for scored_food in ranked_foods[:MAX_RECOMMENDATIONS]
     ]
     used_ids = set()
-    meals = [
-        _meal_payload(meal_type, _choose_meal_food(foods, context, meal_type, used_ids))
-        for meal_type in MEAL_TYPES
-    ]
-    total_price = round(sum(meal["price"] or 0 for meal in meals), 2)
+    meals = []
+
+    for meal_type in MEAL_TYPES:
+        selected_foods = _choose_meal_foods(foods, context, meal_type, used_ids)
+
+        if not selected_foods:
+            meals.append(_empty_meal_payload(meal_type))
+            continue
+
+        meals.extend(
+            _meal_payload(meal_type, scored_food, rank=index + 1)
+            for index, scored_food in enumerate(selected_foods)
+        )
+
+    primary_meals = [meal for meal in _primary_meals(meals) if meal]
+    total_price = round(sum(meal["price"] or 0 for meal in primary_meals), 2)
     remaining_budget = round(context.budget - total_price, 2)
 
     if recommendations:
@@ -486,7 +547,8 @@ def generate_recommendations(data, foods):
             f"健康目标为“{context.health_goal}”，"
             f"预计总价约 {total_price} 元，预算为 {context.budget} 元，"
             f"结余约 {remaining_budget} 元。"
-            "排序已综合预算、口味、忌口、健康目标、今天想吃和奶茶状态。"
+            f"每个餐别最多提供 {MEAL_OPTIONS_PER_TYPE} 个候选，"
+            "排序已综合预算、口味、忌口、健康目标、今天想吃、奶茶状态和推荐权重。"
         )
     else:
         summary = (

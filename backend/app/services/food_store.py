@@ -20,6 +20,18 @@ def parse_price(value):
         return None
 
 
+def parse_frequency_weight(value):
+    try:
+        if value is None or value == "":
+            return 1.0
+
+        weight = float(str(value).strip())
+    except ValueError:
+        return 1.0
+
+    return min(3.0, max(0.5, weight))
+
+
 def normalize_tag_text(value):
     if value is None:
         return ""
@@ -60,6 +72,14 @@ def normalize_food(row):
         or row.get("price")
         or row.get("金额")
     )
+    frequency_weight = parse_frequency_weight(
+        row.get("推荐权重")
+        or row.get("出现频率")
+        or row.get("frequency_weight")
+        or row.get("frequencyWeight")
+        or row.get("recommendation_weight")
+        or row.get("recommendationWeight")
+    )
 
     taste_tags = normalize_tag_text(
         row.get("口味")
@@ -93,6 +113,7 @@ def normalize_food(row):
         "store": store,
         "category": category or "其他",
         "price": price,
+        "frequency_weight": frequency_weight,
         "taste": taste_tags,
         "tags": health_tags,
         "taste_tags": taste_tags,
@@ -179,6 +200,7 @@ def serialize_food(food):
         "store": food.store or "",
         "category": food.category or "",
         "price": food.price,
+        "frequency_weight": float(food.frequency_weight or 1.0),
         "taste_tags": food.taste_tags or food.taste or "",
         "health_tags": food.health_tags or food.tags or "",
         "note": food.note or "",
@@ -192,10 +214,15 @@ def load_foods(db: Session):
     return [serialize_food(food) for food in foods]
 
 
+def count_foods(db: Session):
+    return db.query(FoodItem).count()
+
+
 def normalize_food_payload(data: FoodItemCreate | FoodItemUpdate):
     category = getattr(data, "category", None)
     taste_tags = getattr(data, "taste_tags", None)
     health_tags = getattr(data, "health_tags", None)
+    frequency_weight = getattr(data, "frequency_weight", None)
 
     normalized_category = (category or "").strip() or "其他"
     normalized_taste_tags = normalize_tag_text(taste_tags)
@@ -206,6 +233,7 @@ def normalize_food_payload(data: FoodItemCreate | FoodItemUpdate):
         "store": (getattr(data, "store", None) or "").strip(),
         "category": normalized_category,
         "price": getattr(data, "price", None),
+        "frequency_weight": parse_frequency_weight(frequency_weight),
         "taste": normalized_taste_tags,
         "tags": normalized_health_tags,
         "taste_tags": normalized_taste_tags,
@@ -259,6 +287,7 @@ def update_food(db: Session, food_id: int, data: FoodItemUpdate):
         "store": updates.get("store", food.store or ""),
         "price": updates.get("price", food.price),
         "category": updates.get("category", food.category or "其他"),
+        "frequency_weight": updates.get("frequency_weight", food.frequency_weight or 1.0),
         "taste_tags": updates.get("taste_tags", food.taste_tags or food.taste or ""),
         "health_tags": updates.get("health_tags", food.health_tags or food.tags or ""),
         "note": updates.get("note", food.note or ""),
@@ -279,6 +308,22 @@ def delete_food(db: Session, food_id: int):
     food = get_food_or_404(db, food_id)
     db.delete(food)
     db.commit()
+
+
+def delete_foods_by_ids(db: Session, food_ids):
+    unique_ids = sorted({food_id for food_id in food_ids if food_id > 0})
+
+    if not unique_ids:
+        return 0
+
+    deleted_count = (
+        db.query(FoodItem)
+        .filter(FoodItem.id.in_(unique_ids))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+
+    return deleted_count
 
 
 def replace_foods(db: Session, foods_data):

@@ -24,6 +24,29 @@ def ensure_food_item_columns():
     if "health_tags" not in columns:
         statements.append("ALTER TABLE food_items ADD COLUMN health_tags VARCHAR(240)")
 
+    if "frequency_weight" not in columns:
+        statements.append("ALTER TABLE food_items ADD COLUMN frequency_weight FLOAT DEFAULT 1.0 NOT NULL")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def ensure_daily_record_columns():
+    inspector = inspect(engine)
+
+    if "daily_records" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("daily_records")}
+    statements = []
+
+    if "actual_choice" not in columns:
+        statements.append("ALTER TABLE daily_records ADD COLUMN actual_choice TEXT")
+
     if not statements:
         return
 
@@ -35,3 +58,4 @@ def ensure_food_item_columns():
 def init_db():
     Base.metadata.create_all(bind=engine)
     ensure_food_item_columns()
+    ensure_daily_record_columns()

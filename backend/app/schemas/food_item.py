@@ -28,6 +28,7 @@ class FoodItemBase(BaseModel):
     store: str | None = ""
     price: float = Field(gt=0)
     category: str | None = "其他"
+    frequency_weight: float = Field(default=1.0, ge=0.5, le=3.0)
     taste_tags: str | list[str] | None = ""
     health_tags: str | list[str] | None = ""
     note: str | None = ""
@@ -62,6 +63,7 @@ class FoodItemUpdate(BaseModel):
     store: str | None = None
     price: float | None = Field(default=None, gt=0)
     category: str | None = None
+    frequency_weight: float | None = Field(default=None, ge=0.5, le=3.0)
     taste_tags: str | list[str] | None = None
     health_tags: str | list[str] | None = None
     note: str | None = None
@@ -102,6 +104,7 @@ class FoodItemResponse(BaseModel):
     store: str | None = ""
     category: str | None = ""
     price: float | None = None
+    frequency_weight: float = 1.0
     taste_tags: str | None = ""
     health_tags: str | None = ""
     note: str | None = ""
@@ -120,3 +123,12 @@ class FoodImportResponse(BaseModel):
     message: str
     count: int
     data: list[FoodItemResponse]
+
+
+class FoodBatchDeleteRequest(BaseModel):
+    ids: list[int] = Field(default_factory=list)
+
+
+class FoodBatchDeleteResponse(BaseModel):
+    message: str
+    deleted_count: int

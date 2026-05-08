@@ -18,10 +18,14 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  checkedRowKeys: {
+    type: Array,
+    default: () => []
   }
 });
 
-const emit = defineEmits(["edit", "delete"]);
+const emit = defineEmits(["edit", "delete", "update:checked-row-keys"]);
 
 function renderTags(value, type = "default") {
   const tags = splitTagText(value);
@@ -53,14 +57,18 @@ function renderTags(value, type = "default") {
 
 const columns = computed(() => [
   {
+    type: "selection",
+    width: 46
+  },
+  {
     title: "菜名",
     key: "name",
-    minWidth: 180
+    minWidth: 150
   },
   {
     title: "店名",
     key: "store",
-    minWidth: 140,
+    minWidth: 110,
     render(row) {
       return row.store || "—";
     }
@@ -68,7 +76,7 @@ const columns = computed(() => [
   {
     title: "价格",
     key: "price",
-    width: 100,
+    width: 92,
     render(row) {
       return `${Number(row.price || 0).toFixed(1)} 元`;
     }
@@ -76,15 +84,23 @@ const columns = computed(() => [
   {
     title: "分类",
     key: "category",
-    width: 100,
+    width: 104,
     render(row) {
       return row.category || "其他";
     }
   },
   {
+    title: "推荐权重",
+    key: "frequency_weight",
+    width: 104,
+    render(row) {
+      return `${Number(row.frequency_weight ?? 1).toFixed(1)}x`;
+    }
+  },
+  {
     title: "口味标签",
     key: "taste_tags",
-    minWidth: 160,
+    minWidth: 140,
     render(row) {
       return renderTags(row.taste_tags, "info");
     }
@@ -92,7 +108,7 @@ const columns = computed(() => [
   {
     title: "健康标签",
     key: "health_tags",
-    minWidth: 180,
+    minWidth: 150,
     render(row) {
       return renderTags(row.health_tags, "success");
     }
@@ -100,8 +116,7 @@ const columns = computed(() => [
   {
     title: "操作",
     key: "actions",
-    width: 150,
-    fixed: "right",
+    width: 132,
     render(row) {
       return h(
         NSpace,
@@ -153,8 +168,10 @@ const columns = computed(() => [
     :pagination="false"
     :bordered="false"
     :row-key="(row) => row.id"
-    :scroll-x="1100"
+    :checked-row-keys="checkedRowKeys"
+    :scroll-x="1020"
     class="food-table"
+    @update:checked-row-keys="(keys) => emit('update:checked-row-keys', keys)"
   />
 </template>
 

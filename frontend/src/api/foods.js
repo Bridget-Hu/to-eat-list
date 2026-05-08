@@ -1,6 +1,10 @@
 import { requestJson } from "@/utils/api";
 
 export const foodCategoryOptions = [
+  { label: "早餐", value: "早餐" },
+  { label: "午餐", value: "午餐" },
+  { label: "晚餐", value: "晚餐" },
+  { label: "午餐/晚餐", value: "午餐/晚餐" },
   { label: "主食", value: "主食" },
   { label: "奶茶", value: "奶茶" },
   { label: "小吃", value: "小吃" },
@@ -42,6 +46,13 @@ export function updateFood(foodId, payload) {
 export function deleteFood(foodId) {
   return requestJson(`/foods/${foodId}`, {
     method: "DELETE"
+  });
+}
+
+export function batchDeleteFoods(ids) {
+  return requestJson("/foods/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids })
   });
 }
 

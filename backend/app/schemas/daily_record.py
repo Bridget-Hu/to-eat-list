@@ -5,6 +5,7 @@ class MealRecordResponse(BaseModel):
     type: str
     name: str
     reason: str
+    rank: int = 1
     price: float | None = None
     food_id: int | None = None
     store: str | None = ""
@@ -25,9 +26,14 @@ class DailyRecordResponse(BaseModel):
     totalPrice: float
     remainingBudget: float
     summary: str
+    actualChoice: str = ""
     meals: list[MealRecordResponse]
 
 
 class DailyRecordListResponse(BaseModel):
     count: int
     data: list[DailyRecordResponse]
+
+
+class DailyRecordActualChoiceUpdate(BaseModel):
+    actualChoice: str | None = Field(default="", max_length=240)

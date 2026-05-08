@@ -1,15 +1,24 @@
 <script setup>
+import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
+import { getOverviewStats } from "@/api/stats";
 import AppCard from "@/components/AppCard.vue";
 import PageHeader from "@/components/PageHeader.vue";
 import StatCard from "@/components/StatCard.vue";
+import { errorCopy } from "@/utils/copy";
 
 defineOptions({
   name: "HomePage"
 });
 
 const router = useRouter();
+const overviewLoading = ref(false);
+const overviewError = ref("");
+const overviewStats = ref({
+  foodCount: 0,
+  historyCount: 0
+});
 
 const quickActions = [
   {
@@ -59,6 +68,39 @@ const highlights = [
 function goTo(path) {
   router.push(path);
 }
+
+function formatOverviewValue(value) {
+  if (overviewLoading.value) {
+    return "...";
+  }
+
+  if (overviewError.value) {
+    return "--";
+  }
+
+  return Number(value || 0);
+}
+
+async function loadOverviewStats() {
+  overviewLoading.value = true;
+  overviewError.value = "";
+
+  try {
+    const data = await getOverviewStats();
+    overviewStats.value = {
+      foodCount: Number(data?.food_count || 0),
+      historyCount: Number(data?.history_count || 0)
+    };
+  } catch (error) {
+    overviewError.value = error.message || errorCopy.overviewLoad;
+  } finally {
+    overviewLoading.value = false;
+  }
+}
+
+onMounted(() => {
+  loadOverviewStats();
+});
 </script>
 
 <template>
@@ -72,6 +114,9 @@ function goTo(path) {
         <template #meta>
           <span class="status-pill status-pill--primary">3 步完成一次推荐</span>
           <span class="status-pill status-pill--neutral">生成后自动保存历史</span>
+          <span v-if="overviewError" class="status-pill status-pill--danger">
+            概览暂不可用
+          </span>
         </template>
 
         <template #actions>
@@ -135,6 +180,16 @@ function goTo(path) {
     </AppCard>
 
     <section class="home-stats">
+      <StatCard
+        label="正式菜品数量"
+        :value="formatOverviewValue(overviewStats.foodCount)"
+        hint="当前 SQLite 菜品库中的可推荐菜品数。"
+      />
+      <StatCard
+        label="历史记录数量"
+        :value="formatOverviewValue(overviewStats.historyCount)"
+        hint="已经沉淀下来的推荐历史总数。"
+      />
       <StatCard label="核心流程" value="导入 > 推荐 > 回看" hint="从数据准备到记录沉淀连成一条线。" />
       <StatCard label="推荐视角" value="预算 + 偏好" hint="既考虑今天想吃什么，也照顾健康目标。" />
       <StatCard label="使用方式" value="工具化首屏" hint="先看到高频动作，而不是一整页宣传内容。" />
@@ -269,7 +324,7 @@ function goTo(path) {
 .home-stats,
 .highlight-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 

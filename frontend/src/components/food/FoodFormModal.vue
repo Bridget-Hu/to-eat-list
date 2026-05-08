@@ -67,6 +67,7 @@ function createEmptyForm() {
     store: "",
     price: null,
     category: "其他",
+    frequency_weight: 1,
     taste_tags: "",
     health_tags: "",
     note: ""
@@ -80,6 +81,7 @@ function applyFood(food) {
         store: food.store || "",
         price: food.price ?? null,
         category: food.category || "其他",
+        frequency_weight: Number(food.frequency_weight ?? 1),
         taste_tags: food.taste_tags || "",
         health_tags: food.health_tags || "",
         note: food.note || ""
@@ -102,6 +104,7 @@ async function handleSubmit() {
     store: formModel.store.trim(),
     price: Number(formModel.price),
     category: formModel.category || "其他",
+    frequency_weight: Number(formModel.frequency_weight || 1),
     taste_tags: formModel.taste_tags.trim(),
     health_tags: formModel.health_tags.trim(),
     note: formModel.note.trim()
@@ -157,6 +160,19 @@ watch(
             v-model:value="formModel.category"
             :options="foodCategoryOptions"
             placeholder="请选择分类"
+          />
+        </NFormItem>
+
+        <NFormItem label="推荐权重" path="frequency_weight">
+          <NInputNumber
+            v-model:value="formModel.frequency_weight"
+            :min="0.5"
+            :max="3"
+            :step="0.1"
+            :precision="1"
+            placeholder="默认 1.0，越高越常出现"
+            clearable
+            class="food-form-number"
           />
         </NFormItem>
 

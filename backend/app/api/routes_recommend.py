@@ -21,6 +21,20 @@ def _plain_text(value):
     return str(value).strip()
 
 
+def _primary_meal(meals, meal_type):
+    return next(
+        (
+            meal
+            for meal in meals
+            if meal.get("type") == meal_type and int(meal.get("rank") or 1) == 1
+        ),
+        None,
+    ) or {
+        "name": f"暂无合适{meal_type}",
+        "reason": f"暂无符合条件的{meal_type}菜品。",
+    }
+
+
 def _generate_and_save_recommendation(data: RecommendRequest, db: Session):
     foods = load_foods(db)
 
@@ -46,14 +60,17 @@ def _generate_and_save_recommendation(data: RecommendRequest, db: Session):
     })
 
     meals = recommendation["meals"]
+    breakfast = _primary_meal(meals, "早餐")
+    lunch = _primary_meal(meals, "午餐")
+    dinner = _primary_meal(meals, "晚餐")
 
     return {
-        "breakfast": meals[0]["name"],
-        "breakfastReason": meals[0]["reason"],
-        "lunch": meals[1]["name"],
-        "lunchReason": meals[1]["reason"],
-        "dinner": meals[2]["name"],
-        "dinnerReason": meals[2]["reason"],
+        "breakfast": breakfast["name"],
+        "breakfastReason": breakfast["reason"],
+        "lunch": lunch["name"],
+        "lunchReason": lunch["reason"],
+        "dinner": dinner["name"],
+        "dinnerReason": dinner["reason"],
         "summary": recommendation["summary"],
         "totalPrice": recommendation["totalPrice"],
         "remainingBudget": recommendation["remainingBudget"],

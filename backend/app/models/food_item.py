@@ -13,6 +13,7 @@ class FoodItem(Base):
     store = Column(String(120), nullable=True, index=True)
     category = Column(String(80), nullable=True, index=True)
     price = Column(Float, nullable=True)
+    frequency_weight = Column(Float, nullable=False, default=1.0)
     taste = Column(String(120), nullable=True)
     tags = Column(String(240), nullable=True)
     taste_tags = Column(String(240), nullable=True)
